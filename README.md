@@ -29,7 +29,19 @@ Trips move through a lifecycle automatically by their dates: **Planning → Upco
 - **Journal** — daily entries with mood; empty entries never persist
 - Export/import: single trip or everything; Android back button closes layers instead of exiting
 
-Planned next: international pack (derived time-zone clocks, currency converter), business pack (wallets/company-vs-personal funds/teammate splits — ported from the Germany Trip app), memory room (past-trip reading view, Year in Travel).
+## Phase 2 — international pack + people
+
+- **Bookings timeline** (Plan → Bookings): flights/hotels/trains with journey grouping, layover chips (warns when tight or when leg time zones conflict), inline terminal/gate editing, photo attachments, hotel "show driver" local-language address
+- **Airport cards** (Plan → Airports): tickable step lists for each airport/layover
+- **Derived clock strip**: home + destination + any layover zones found in your flight legs — appears only on international trips
+- **Per-trip currency converter** (Money → Convert) with user-saved rate + date; home-currency equivalents on spend totals
+- **Phrasebook**: shared per language across trips; German starter pack; search + full-screen phrase display
+- **Travel wallet** (shelf level, shared across trips): document vault (IndexedDB, compressed), people directory, my-info fields, home settings
+- **People & operator** per trip: companions from the shared directory (solo/partner/group), tour-operator card (company, contact, booking ref) — both surface on Today and the emergency card
+- **Emergency card** per trip: trip fields + operator + companion phones + shared my-info
+- Backups now carry the shared wallet and all images
+
+Planned next: business pack (wallets/company-vs-personal funds/teammate splits — ported from the Germany Trip app), memory room (past-trip reading view, Year in Travel), Germany-trip import.
 
 ## Storage
 

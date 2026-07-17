@@ -147,6 +147,52 @@ input:focus,textarea:focus,select:focus{outline:none; border-color:var(--accent)
 .tmpl{display:flex; gap:10px; align-items:flex-start; padding:12px; border-radius:12px; border:1.5px solid var(--line); margin-bottom:8px; background:#fff; cursor:pointer;}
 .tmpl.on{border-color:var(--accent); background:var(--accent-soft);}
 .tmpl .te{font-size:1.6rem;}
+
+/* clock strip (second row of the sticky header) */
+.clockrow{display:flex; gap:10px; margin-top:8px;}
+.clockrow .zone{flex:1; text-align:center; line-height:1.15;}
+.clockrow .zt{font-size:1.05rem; font-weight:700; letter-spacing:.5px; font-variant-numeric:tabular-nums;}
+.clockrow .zl{font-size:.6rem; text-transform:uppercase; letter-spacing:.6px; opacity:.85;}
+.clockrow .sep{width:1px; background:rgba(255,255,255,.28); margin:2px 0;}
+
+/* timeline */
+.tl-item{display:flex; gap:12px;}
+.tl-rail{display:flex; flex-direction:column; align-items:center; padding-top:4px;}
+.tl-dot{width:14px; height:14px; border-radius:50%; background:var(--accent); border:3px solid var(--accent-soft); flex:none;}
+.tl-line{flex:1; width:2px; background:var(--line); margin-top:2px; min-height:14px;}
+.tl-body{flex:1; padding-bottom:14px;}
+.fab-actions{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+
+/* airport steps */
+.step{display:flex; gap:10px; align-items:flex-start; padding:10px; border-radius:12px; border:1px solid var(--line); margin-bottom:8px; background:#fff;}
+.step.done{background:var(--accent-soft); border-color:var(--accent-soft);}
+.step .box{width:26px; height:26px; border-radius:7px; border:2px solid var(--accent); flex:none; display:flex; align-items:center; justify-content:center; font-size:1rem; color:#fff; margin-top:1px;}
+.step.done .box{background:var(--accent);}
+.step .txt{flex:1; line-height:1.4;}
+.step.done .txt{text-decoration:line-through; opacity:.6;}
+
+/* phrasebook */
+.phrase{padding:12px; border:1px solid var(--line); border-radius:12px; margin-bottom:8px; background:#fff;}
+.phrase .en{font-weight:700;} .phrase .de{color:var(--accent-ink); font-size:1.05rem;} .phrase .ph{color:var(--muted); font-size:.85rem; font-style:italic;}
+
+/* vault grid */
+.vgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.vcell{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; position:relative;}
+.vcell img{width:100%; height:120px; object-fit:cover; display:block; background:#eee;}
+.vcell .vlabel{padding:8px 10px; font-weight:600; font-size:.85rem;}
+.vcell .vdel{position:absolute; top:6px; right:6px; background:rgba(0,0,0,.55); color:#fff; width:30px; height:30px; border-radius:50%;}
+
+/* fullscreen display */
+.fs{position:fixed; inset:0; background:#1d130b; color:#fff; z-index:120; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center;}
+.fs .fs-en{font-size:1.1rem; opacity:.7; margin-bottom:14px;}
+.fs .fs-de{font-size:2.4rem; font-weight:800; line-height:1.25;}
+.fs .fs-ph{font-size:1.3rem; opacity:.85; margin-top:16px; font-style:italic;}
+.fs .fs-close{position:absolute; top:calc(env(safe-area-inset-top) + 14px); right:16px; font-size:1rem; background:rgba(255,255,255,.15); padding:8px 16px; border-radius:999px; color:#fff;}
+.fs img{max-width:100%; max-height:78vh; object-fit:contain; touch-action:pinch-zoom;}
+.fs .fs-addr{font-size:2rem; font-weight:700; line-height:1.35;}
+
+/* people chips */
+.pchip{display:inline-flex; align-items:center; gap:6px; background:var(--accent-soft); color:var(--accent-ink); border-radius:999px; padding:7px 14px; font-weight:700; font-size:.88rem; margin:0 6px 6px 0;}
 </style>
 </head>
 <body>
@@ -155,6 +201,7 @@ input:focus,textarea:focus,select:focus{outline:none; border-color:var(--accent)
 <div id="app"></div>
 <nav class="tabbar" id="tabbar" style="display:none"></nav>
 <div id="modal-root"></div>
+<div id="fs-root"></div>
 
 <script>
 "use strict";
@@ -173,30 +220,118 @@ const dateAdd=(iso,n)=>{const d=new Date(iso+"T12:00");d.setDate(d.getDate()+n);
 const daysBetween=(a,b)=>Math.round((new Date(b+"T12:00")-new Date(a+"T12:00"))/dayMs);
 function prettyDate(d,withYear){ try{ return new Date(d+"T12:00").toLocaleDateString("en-GB",Object.assign({weekday:"short",day:"numeric",month:"short"},withYear?{year:"numeric"}:{})); }catch(e){ return d; } }
 
+/* ---------------- time zones (Intl-based, no hand-rolled DST) ---------------- */
+const TZ_OPTS=["Europe/Berlin","Asia/Kolkata","Europe/Istanbul","Asia/Dubai","Asia/Qatar","Europe/London","Europe/Paris","Asia/Singapore","Asia/Tokyo","Australia/Sydney","Etc/UTC","America/New_York","America/Los_Angeles"];
+function tzOffsetMs(date,tz){
+  const dtf=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const p={}; dtf.formatToParts(date).forEach(x=>{ if(x.type!=='literal') p[x.type]=x.value; });
+  let hh=p.hour==='24'?'00':p.hour;
+  const asUTC=Date.UTC(+p.year,+p.month-1,+p.day,+hh,+p.minute,+p.second);
+  return asUTC-date.getTime();
+}
+function zonedToDate(localStr,tz){
+  if(!localStr) return null;
+  const m=localStr.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if(!m) return null;
+  const guess=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]);
+  let off=tzOffsetMs(new Date(guess),tz||'Asia/Kolkata');
+  off=tzOffsetMs(new Date(guess-off),tz||'Asia/Kolkata');
+  return new Date(guess-off);
+}
+function fmtZoned(localStr,tz){
+  const d=zonedToDate(localStr,tz); if(!d) return "";
+  try{ return new Intl.DateTimeFormat('en-GB',{timeZone:tz,weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(d); }catch(e){ return localStr; }
+}
+function fmtDur(ms){ return Math.floor(ms/36e5)+"h "+String(Math.round((ms%36e5)/6e4)).padStart(2,"0")+"m"; }
+const tzCity=tz=>String(tz||"").split("/").pop().replace(/_/g," ");
+
+/* ---------------- IndexedDB vault (compressed images) ---------------- */
+const DB={
+  db:null,
+  open(){ return new Promise((res,rej)=>{
+    if(this.db) return res(this.db);
+    const r=indexedDB.open("yatraVault",1);
+    r.onupgradeneeded=e=>{ const db=e.target.result; if(!db.objectStoreNames.contains("images")) db.createObjectStore("images",{keyPath:"id"}); };
+    r.onsuccess=e=>{ this.db=e.target.result; res(this.db); };
+    r.onerror=e=>rej(e.target.error);
+  });},
+  async put(id,dataUrl){ const db=await this.open(); return new Promise((res,rej)=>{ const tx=db.transaction("images","readwrite"); tx.objectStore("images").put({id,dataUrl}); tx.oncomplete=()=>res(true); tx.onerror=e=>rej(e.target.error); }); },
+  async get(id){ const db=await this.open(); return new Promise((res,rej)=>{ const tx=db.transaction("images","readonly"); const rq=tx.objectStore("images").get(id); rq.onsuccess=()=>res(rq.result?rq.result.dataUrl:null); rq.onerror=e=>rej(e.target.error); }); },
+  async del(id){ const db=await this.open(); return new Promise((res,rej)=>{ const tx=db.transaction("images","readwrite"); tx.objectStore("images").delete(id); tx.oncomplete=()=>res(true); tx.onerror=e=>rej(e.target.error); }); },
+  async all(){ const db=await this.open(); return new Promise((res,rej)=>{ const tx=db.transaction("images","readonly"); const rq=tx.objectStore("images").getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=e=>rej(e.target.error); }); }
+};
+function compressImage(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        let {width:w,height:h}=img; const max=1200;
+        if(w>h&&w>max){ h=Math.round(h*max/w); w=max; }
+        else if(h>=w&&h>max){ w=Math.round(w*max/h); h=max; }
+        const c=document.createElement("canvas"); c.width=w; c.height=h;
+        c.getContext("2d").drawImage(img,0,0,w,h);
+        try{ res(c.toDataURL("image/jpeg",0.7)); }catch(e){ rej(e); }
+      };
+      img.onerror=rej; img.src=fr.result;
+    };
+    fr.onerror=rej; fr.readAsDataURL(file);
+  });
+}
+
+/* ---------------- fullscreen views ---------------- */
+function closeFs(){ $("#fs-root").innerHTML=""; }
+function fullscreenText(html){ $("#fs-root").innerHTML=`<div class="fs"><button class="fs-close" onclick="closeFs()">✕ Close</button>${html}</div>`; }
+function fullscreenAddr(addr){ fullscreenText(`<div class="fs-en">Show this to the driver</div><div class="fs-addr">${esc(addr).replace(/\n/g,"<br>")}</div>`); }
+function fullscreenPhrase(p){ fullscreenText(`<div class="fs-en">${esc(p.en)}</div><div class="fs-de">${esc(p.nat)}</div><div class="fs-ph">${esc(p.ph)}</div>`); }
+async function fullscreenImage(id){
+  const url=await DB.get(id);
+  if(!url){ toast("Image not found"); return; }
+  $("#fs-root").innerHTML=`<div class="fs"><button class="fs-close" onclick="closeFs()">✕ Close</button><img src="${url}" alt=""></div>`;
+}
+
 /* ---------------- templates ---------------- */
 const CURRENCIES=[["₹","₹ Rupee (INR)"],["€","€ Euro"],["$","$ Dollar"],["£","£ Pound"],["¥","¥ Yen"],["AED","AED Dirham"]];
 const TEMPLATES={
-  business:{label:"Business",emoji:"💼",desc:"Bookings, per-diem budget, work lists",modules:{planner:true,journal:true,budget:true,lists:true},
+  business:{label:"Business",emoji:"💼",desc:"Bookings, per-diem budget, work lists",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
     lists:[["Packing",["Laptop + charger","Formal wear","ID card / badge","Power adapter","Medicines"]],["To do before leaving",["Set out-of-office","Print documents","Inform bank if abroad"]]]},
-  leisure:{label:"Tourism & relaxation",emoji:"🌍",desc:"Day plans, sights, budget, journal",modules:{planner:true,journal:true,budget:true,lists:true},
+  leisure:{label:"Tourism & relaxation",emoji:"🌍",desc:"Day plans, sights, budget, journal",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
     lists:[["Packing",["Clothes","Comfortable shoes","Chargers","Medicines","Sunscreen"]],["To buy / bring home",[]]]},
-  pilgrimage:{label:"Pilgrimage",emoji:"🛕",desc:"Darshan sequence, offerings, journal",modules:{planner:true,journal:true,budget:true,lists:true},
+  pilgrimage:{label:"Pilgrimage",emoji:"🛕",desc:"Darshan sequence, offerings, journal",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
     lists:[["Darshan sequence",[]],["Offerings & puja items",[]],["Packing",["Comfortable footwear","Shawl / traditional wear","Medicines"]]]},
-  tournament:{label:"Tournament",emoji:"🃏",desc:"Schedule, results log, budget",modules:{planner:true,journal:true,budget:true,lists:true},
+  tournament:{label:"Tournament",emoji:"🃏",desc:"Schedule, results log, budget",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
     lists:[["Matches & results",[]],["Packing",["Convention card","Stationery","Comfortable clothes"]]]},
-  local:{label:"Local getaway",emoji:"🏞️",desc:"Simple plan + budget, no frills",modules:{planner:true,journal:true,budget:true,lists:true},
+  local:{label:"Local getaway",emoji:"🏞️",desc:"Simple plan + budget, no frills",modules:{planner:true,timeline:false,journal:true,budget:true,lists:true},
     lists:[["Packing",["Clothes","Chargers","Snacks for the road"]]]},
-  free:{label:"Free-form",emoji:"🪁",desc:"No itinerary — journal and budget only",modules:{planner:false,journal:true,budget:true,lists:false},lists:[]}
+  free:{label:"Free-form",emoji:"🪁",desc:"No itinerary — journal and budget only",modules:{planner:false,timeline:false,journal:true,budget:true,lists:false},lists:[]}
 };
 
-/* ---------------- shelf (index) ---------------- */
-let SHELF=null;
+/* ---------------- shelf (index) + shared travel wallet ---------------- */
+const SHARED_KEY="yatra.shared";
+let SHELF=null, SHARED=null;
 function loadShelf(){
-  try{ const raw=localStorage.getItem(SHELF_KEY); if(raw){ SHELF=JSON.parse(raw); if(!Array.isArray(SHELF.trips)) SHELF.trips=[]; return; } }catch(e){}
-  SHELF={version:1,trips:[]};
+  try{ const raw=localStorage.getItem(SHELF_KEY); if(raw){ SHELF=JSON.parse(raw); if(!Array.isArray(SHELF.trips)) SHELF.trips=[]; } }catch(e){}
+  if(!SHELF){ SHELF={version:1,trips:[]}; }
+  if(!SHELF.settings) SHELF.settings={homeTz:"Asia/Kolkata",homeCur:"₹"};
   saveShelf();
+  try{ const raw=localStorage.getItem(SHARED_KEY); if(raw) SHARED=JSON.parse(raw); }catch(e){}
+  if(!SHARED) SHARED={};
+  if(!Array.isArray(SHARED.people)) SHARED.people=[];
+  if(!SHARED.phrasebooks||typeof SHARED.phrasebooks!=="object") SHARED.phrasebooks={};
+  if(!Array.isArray(SHARED.vaultIndex)) SHARED.vaultIndex=[];
+  if(!SHARED.personal||!Array.isArray(SHARED.personal.fields)) SHARED.personal={fields:[
+    {id:uid(),label:"Blood group / medical notes",value:""},
+    {id:uid(),label:"Travel insurance + policy no.",value:""},
+    {id:uid(),label:"Insurance 24h hotline",value:""},
+    {id:uid(),label:"Emergency contact at home",value:""}
+  ]};
+  saveShared();
 }
 function saveShelf(){ try{ localStorage.setItem(SHELF_KEY,JSON.stringify(SHELF)); }catch(e){ toast("⚠️ Could not save"); } }
+function saveShared(){ try{ localStorage.setItem(SHARED_KEY,JSON.stringify(SHARED)); }catch(e){ toast("⚠️ Could not save"); } }
+const homeTz=()=>SHELF.settings.homeTz||"Asia/Kolkata";
+const homeCur=()=>SHELF.settings.homeCur||"₹";
+const personById=id=>SHARED.people.find(p=>p.id===id);
 
 /* ---------------- trip load/save ---------------- */
 let T=null;           // currently open trip
@@ -215,20 +350,39 @@ function saveTripNow(){
   }
 }
 function loadTrip(id){
-  try{ const raw=localStorage.getItem(TRIP_PREFIX+id); if(raw) return JSON.parse(raw); }catch(e){}
+  try{ const raw=localStorage.getItem(TRIP_PREFIX+id); if(raw) return mergeTrip(JSON.parse(raw)); }catch(e){}
   return null;
 }
 function newTripObject(o){
   const tpl=TEMPLATES[o.template]||TEMPLATES.leisure;
-  return {
-    schema:1, id:uid(), created:todayISO(),
+  return mergeTrip({
+    schema:2, id:uid(), created:todayISO(),
     name:o.name||"Trip", dest:o.dest||"", emoji:o.emoji||tpl.emoji, template:o.template,
     start:o.start||"", end:o.end||"", currency:o.currency||"₹",
+    destTz:o.destTz||"", language:o.language||"",
     modules:Object.assign({},tpl.modules),
     budget:{total:o.budgetTotal||"", perDiem:o.perDiem||""},
     expenses:[], planItems:[], journal:[],
     lists:tpl.lists.map(l=>({id:uid(),name:l[0],items:l[1].map(t=>({id:uid(),text:t,done:false}))}))
-  };
+  });
+}
+// upgrade Phase-1 trips (and fill any missing fields) on load
+function mergeTrip(t){
+  if(!t.modules) t.modules={};
+  if(t.modules.timeline===undefined){ const tpl=TEMPLATES[t.template]; t.modules.timeline=tpl?!!tpl.modules.timeline:true; }
+  ["destTz","language"].forEach(k=>{ if(t[k]===undefined) t[k]=""; });
+  if(t.rate===undefined) t.rate="";
+  if(t.rateDate===undefined) t.rateDate="";
+  if(!Array.isArray(t.tripItems)) t.tripItems=[];
+  if(!Array.isArray(t.airportCards)) t.airportCards=[];
+  if(!Array.isArray(t.companions)) t.companions=[];
+  if(!t.operator||typeof t.operator!=="object") t.operator={name:"",phone:"",contact:"",ref:"",note:""};
+  if(!t.emergency||!Array.isArray(t.emergency.fields)) t.emergency={fields:[
+    {id:uid(),label:"Local emergency number",value:""},
+    {id:uid(),label:"Hotel name & phone",value:""}
+  ]};
+  t.schema=2;
+  return t;
 }
 
 /* ---------------- lifecycle ---------------- */
@@ -258,8 +412,13 @@ function openForm(title,fields,values,onSave,opts){
     const v=values[f.key]!==undefined?values[f.key]:(f.default!==undefined?f.default:"");
     let ctl;
     if(f.type==="textarea") ctl=`<textarea id="f_${f.key}" placeholder="${esc(f.placeholder||"")}">${esc(v)}</textarea>`;
-    else if(f.type==="select"){
-      const opts2=f.options.map(o=>Array.isArray(o)?o:[o,o]);
+    else if(f.type==="select"||f.type==="tz"){
+      let opts2;
+      if(f.type==="tz"){
+        const base=TZ_OPTS.slice();
+        if(v&&!base.includes(v)) base.unshift(v); // never drop a zone already saved
+        opts2=base.map(z=>[z,z.replace("Etc/","").replace(/_/g," ")]);
+      } else opts2=f.options.map(o=>Array.isArray(o)?o:[o,o]);
       ctl=`<select id="f_${f.key}">`+opts2.map(o=>`<option value="${esc(o[0])}"${String(v)===String(o[0])?" selected":""}>${esc(o[1])}</option>`).join("")+`</select>`;
     }
     else if(f.type==="checkbox") return `<label style="display:flex;gap:10px;align-items:center;font-size:1rem;color:var(--ink);text-transform:none;margin:6px 0;"><input type="checkbox" id="f_${f.key}" style="width:24px;height:24px;min-height:0;" ${v?"checked":""}> ${esc(f.label)}</label>`;
@@ -293,20 +452,44 @@ let view="shelf";       // 'shelf' | 'trip'
 let tripTab="today";
 function tripTabs(){
   const tabs=[["today","🏠","Today"]];
-  if(T.modules.planner) tabs.push(["plan","🗓️","Plan"]);
+  if(T.modules.planner||T.modules.timeline) tabs.push(["plan","🗓️",T.modules.planner?"Plan":"Trip"]);
   if(T.modules.budget) tabs.push(["money","💰","Money"]);
   if(T.modules.lists) tabs.push(["lists","✅","Lists"]);
   if(T.modules.journal) tabs.push(["journal","📓","Journal"]);
   tabs.push(["more","⋯","More"]);
   return tabs;
 }
+// clock zones: home + destination + any layover zones found in flight legs
+function clockZones(){
+  if(!T||!T.destTz||T.destTz===homeTz()) return [];
+  const zones=[["Home",homeTz()],[tzCity(T.destTz),T.destTz]];
+  const extra=[];
+  T.tripItems.forEach(it=>{
+    if(it.type!=="Flight") return;
+    [it.depTz,it.arrTz].forEach(z=>{
+      if(z&&z!==homeTz()&&z!==T.destTz&&!extra.includes(z)) extra.push(z);
+    });
+  });
+  extra.slice(0,2).forEach(z=>zones.splice(1,0,[tzCity(z),z]));
+  return zones;
+}
 function renderHeader(){
   const h=$("#apphdr");
-  if(view==="shelf"){ h.innerHTML=`<div class="title">🧳 Yātrā</div>`; return; }
+  if(view==="shelf"){ h.innerHTML=`<div class="title" style="padding:4px 0">🧳 Yātrā</div>`; return; }
+  if(view==="wallet"){ h.innerHTML=`<button class="backchip" onclick="view='shelf';render()">‹ Back</button><div class="title" style="padding:4px 0">🗂️ Travel wallet</div>`; return; }
   const st=tripStatus(T);
-  h.innerHTML=`<button class="backchip" onclick="exitToShelf()">‹ Trips</button>
+  const zones=clockZones();
+  const clocks=zones.length?`<div class="clockrow">${zones.map((z,i)=>`${i?'<div class="sep"></div>':''}<div class="zone"><div class="zt" data-clk="${esc(z[1])}">--:--</div><div class="zl">${esc(z[0])}</div></div>`).join("")}</div>`:"";
+  h.innerHTML=`<div style="flex:1"><div class="row" style="gap:10px"><button class="backchip" onclick="exitToShelf()">‹ Trips</button>
     <div class="title">${esc(T.emoji)} ${esc(T.name)}</div>
-    <span class="statuschip">${STATUS_LABEL[st]}</span>`;
+    <span class="statuschip">${STATUS_LABEL[st]}</span></div>${clocks}</div>`;
+  updateClocks();
+}
+function updateClocks(){
+  const now=new Date();
+  document.querySelectorAll("[data-clk]").forEach(el=>{
+    try{ el.textContent=new Intl.DateTimeFormat('en-GB',{timeZone:el.dataset.clk,hour:'2-digit',minute:'2-digit',hour12:false}).format(now); }catch(e){}
+  });
 }
 function renderTabbar(){
   const bar=$("#tabbar");
@@ -314,19 +497,23 @@ function renderTabbar(){
   bar.style.display="flex";
   bar.innerHTML=tripTabs().map(t=>`<button class="tab ${tripTab===t[0]?'active':''}" onclick="goTab('${t[0]}')"><span class="ti">${t[1]}</span><span class="tl">${t[2]}</span></button>`).join("");
 }
-function goTab(tab){ tripTab=tab; render(); window.scrollTo(0,0); }
+function goTab(tab){ if(tab!=="more") moreSub=null; tripTab=tab; render(); window.scrollTo(0,0); }
 function render(){
   renderHeader(); renderTabbar();
   const el=$("#app");
   if(view==="shelf"){ el.innerHTML=`<div class="screen">${shelfView()}</div>`; return; }
+  if(view==="wallet"){ el.innerHTML=`<div class="screen">${walletView()}</div>`; loadVaultImages(); return; }
   const fn={today:todayView,plan:planView,money:moneyView,lists:listsView,journal:journalView,more:moreView}[tripTab]||todayView;
   el.innerHTML=`<div class="screen">${fn()}</div>`;
+  if(tripTab==="more"&&moreSub==="docs") loadVaultImages();
+  if($("#cdTimer")) tickCountdown();
 }
 function rerender(){ render(); } // no scroll reset
 function enterTrip(id){
   const t=loadTrip(id);
   if(!t){ toast("⚠️ Trip data missing"); return; }
-  T=t; view="trip"; tripTab="today"; render(); window.scrollTo(0,0);
+  T=t; view="trip"; tripTab="today"; moreSub=null; planSeg="days"; moneySeg="spend"; phraseQuery="";
+  render(); window.scrollTo(0,0);
 }
 function exitToShelf(){ saveTripNow(); T=null; view="shelf"; render(); window.scrollTo(0,0); }
 
@@ -340,7 +527,8 @@ function shelfView(){
   const planning=trips.filter(x=>x.st==="planning");
   const past=trips.filter(x=>x.st==="past").sort((a,b)=>b.ix.end.localeCompare(a.ix.end));
   let html=`<div class="screen-title">Your journeys</div>
-    <button class="btn block" onclick="openNewTrip()" style="margin-bottom:16px">➕ New trip</button>`;
+    <button class="btn block" onclick="openNewTrip()" style="margin-bottom:10px">➕ New trip</button>
+    <div class="card tap" onclick="view='wallet';render()" style="margin-bottom:16px"><div class="row"><span style="font-size:1.6rem">🗂️</span><div style="flex:1"><h3 style="margin:0">Travel wallet</h3><div class="small muted">Documents, people & my info — shared across trips</div></div><span class="muted">›</span></div></div>`;
   if(!trips.length){
     html+=`<div class="empty"><span class="ei">🧳</span>No trips yet.<br>Plan your first yātrā — business, pilgrimage,<br>tournament or just getting away.</div>`;
     return html;
@@ -372,6 +560,50 @@ function shelfView(){
   }
   return html;
 }
+/* ---------------- Travel wallet (shelf-level shared layer) ---------------- */
+function walletView(){
+  let html=`<div class="note" id="storageNote">Checking storage…</div>
+    <div class="grouphdr">Documents</div>
+    <label class="btn block" style="cursor:pointer;margin:8px 0 12px">📷 Add document photo<input type="file" accept="image/*" style="display:none" onchange="addVaultImage(this)"></label>`;
+  html+=SHARED.vaultIndex.length?`<div class="vgrid" style="margin-bottom:14px">`+SHARED.vaultIndex.map(v=>`<div class="vcell"><img data-imgid="${v.id}" onclick="fullscreenImage('${v.id}')" alt="${esc(v.label)}"><button class="vdel" onclick="deleteVault('${v.id}')">✕</button><div class="vlabel" onclick="renameVault('${v.id}')">${esc(v.label)} ✎</div></div>`).join("")+`</div>`
+    :`<p class="muted small" style="margin-bottom:14px">Nothing yet — passport, visa, insurance live here once, for every trip.</p>`;
+  html+=`<div class="grouphdr">People directory</div>`;
+  if(!SHARED.people.length) html+=`<p class="muted small">People you travel with, saved once. Add them here or from any trip.</p>`;
+  else html+=`<div style="margin:8px 0">`+SHARED.people.map(p=>`<span class="pchip" onclick="editPersonGlobal('${p.id}')">${esc(p.name)}${p.phone?" 📞":""}</span>`).join("")+`</div>`;
+  html+=`<button class="btn ghost block" style="margin-bottom:14px" onclick="addPersonGlobal()">➕ Add person</button>`;
+  html+=`<div class="grouphdr">My info (shown on every emergency card)</div><div class="card">`+
+    SHARED.personal.fields.map(f=>`<div class="kv"><div class="k" style="width:130px">${esc(f.label)}</div><div class="v"><span class="editable ${f.value?'':'empty-val'}" onclick="editPersonal('${f.id}')">${esc(f.value||"Tap to fill")}</span></div></div>`).join("")+
+    `<button class="btn ghost sm" style="margin-top:8px" onclick="addPersonal()">➕ Add field</button></div>`;
+  html+=`<div class="grouphdr">Home settings</div><div class="card">
+    <div class="kv"><div class="k">Home zone</div><div class="v editable" onclick="editHomeTz()">${esc(homeTz())}</div></div>
+    <div class="kv"><div class="k">Home currency</div><div class="v editable" onclick="editHomeCur()">${esc(homeCur())}</div></div>
+  </div>`;
+  return html;
+}
+function addPersonGlobal(){
+  openForm("Add person",[{key:"name",label:"Name"},{key:"phone",label:"Phone"},{key:"note",label:"Note",placeholder:"e.g. bridge partner"}],{},o=>{
+    if(!o.name){ toast("Give them a name"); return; }
+    SHARED.people.push({id:uid(),name:o.name,phone:o.phone||"",note:o.note||""});
+    saveShared(); rerender();
+  });
+}
+function editPersonGlobal(id){
+  const p=personById(id); if(!p) return;
+  openForm("Edit person",[
+    {key:"name",label:"Name",default:p.name},
+    {key:"phone",label:"Phone",default:p.phone},
+    {key:"note",label:"Note",default:p.note}
+  ],p,o=>{ Object.assign(p,o); saveShared(); rerender(); },
+  {onDelete:()=>{ SHARED.people=SHARED.people.filter(x=>x.id!==id); saveShared(); rerender(); toast("Removed from directory"); }});
+}
+function editHomeTz(){
+  const opts=TZ_OPTS.slice(); if(!opts.includes(homeTz())) opts.unshift(homeTz());
+  openForm("Home time zone",[{key:"z",label:"Zone",type:"select",options:opts.map(z=>[z,z.replace("Etc/","").replace(/_/g," ")]),default:homeTz()}],{z:homeTz()},o=>{ SHELF.settings.homeTz=o.z; saveShelf(); rerender(); });
+}
+function editHomeCur(){
+  openForm("Home currency",[{key:"c",label:"Currency",type:"select",options:CURRENCIES,default:homeCur()}],{c:homeCur()},o=>{ SHELF.settings.homeCur=o.c; saveShelf(); rerender(); });
+}
+
 function openNewTrip(){
   // template picker first — one tap sets everything up
   let chosen="leisure";
@@ -387,6 +619,8 @@ function openNewTrip(){
     <label for="nt_start">Start date (leave blank if still dreaming)</label><input id="nt_start" type="date">
     <label for="nt_end">End date</label><input id="nt_end" type="date">
     <label for="nt_cur">Currency</label><select id="nt_cur">${CURRENCIES.map(c=>`<option value="${c[0]}">${c[1]}</option>`).join("")}</select>
+    <label for="nt_tz">Destination time zone (if abroad)</label><select id="nt_tz"><option value="">— same as home —</option>${TZ_OPTS.map(z=>`<option value="${z}">${z.replace("Etc/","").replace(/_/g," ")}</option>`).join("")}</select>
+    <label for="nt_lang">Local language (optional, enables phrasebook)</label><input id="nt_lang" placeholder="e.g. German">
     <div class="modal-actions"><button class="btn grey" onclick="closeModal()">Cancel</button><button class="btn" id="nt_create">Create</button></div>
   </div></div>`;
   modalDismiss=null;
@@ -395,7 +629,7 @@ function openNewTrip(){
   $("#nt_create").onclick=()=>{
     const name=$("#nt_name").value.trim();
     if(!name){ toast("Give the trip a name"); return; }
-    const t=newTripObject({template:chosen,name,dest:$("#nt_dest").value.trim(),start:$("#nt_start").value,end:$("#nt_end").value,currency:$("#nt_cur").value});
+    const t=newTripObject({template:chosen,name,dest:$("#nt_dest").value.trim(),start:$("#nt_start").value,end:$("#nt_end").value,currency:$("#nt_cur").value,destTz:$("#nt_tz").value,language:$("#nt_lang").value.trim()});
     if(t.start&&t.end&&t.end<t.start){ toast("End date is before start date"); return; }
     SHELF.trips.push({id:t.id,name:t.name,dest:t.dest,emoji:t.emoji,start:t.start,end:t.end,currency:t.currency,stats:{}});
     saveShelf();
@@ -410,12 +644,51 @@ function openNewTrip(){
 function fmt(n){ return esc(T.currency||"₹")+(Number(n)||0).toFixed(2); }
 function todaySpendT(){ return T.expenses.filter(e=>e.date===todayISO()).reduce((a,e)=>a+(+e.amount||0),0); }
 function tripSpend(){ return T.expenses.reduce((a,e)=>a+(+e.amount||0),0); }
+function companionChips(){
+  const comps=T.companions.map(id=>personById(id)).filter(Boolean).map(p=>p.name);
+  let chips="";
+  if(comps.length) chips+=`<span class="pill">👥 With ${esc(comps.slice(0,2).join(", "))}${comps.length>2?" +"+(comps.length-2):""}</span> `;
+  if(T.operator.name) chips+=`<span class="pill grey">🚌 via ${esc(T.operator.name)}</span>`;
+  return chips?`<div style="margin-bottom:12px">${chips}</div>`:"";
+}
+let cdInterval=null;
+function upNextCard(){
+  if(!T.modules.timeline) return "";
+  const nx=nextItem();
+  if(!nx) return "";
+  const when=nx.type==="Flight"?fmtZoned(nx.depTime,nx.depTz):(nx.type==="Hotel"?(nx.checkIn||""):fmtZoned(nx.when,T.destTz||homeTz()));
+  return `<div class="card tap" onclick="goTab('plan');planSeg='bookings';rerender()">
+    <div class="row between"><span class="pill">${TYPE_ICON[nx.type]||"📌"} Up next</span><span class="tiny muted">${esc(when)}</span></div>
+    <h3 style="margin:8px 0 2px">${esc(itemTitle(nx))}</h3>
+    <div class="small muted">${esc(itemSub(nx))}</div>
+    <div class="bignum" id="cdTimer" style="font-size:1.5rem;margin-top:6px">—</div>
+  </div>`;
+}
+function tickCountdown(){
+  clearInterval(cdInterval);
+  const upd=()=>{
+    const t=$("#cdTimer");
+    if(!t||view!=="trip"){ clearInterval(cdInterval); return; }
+    const nx=nextItem();
+    if(!nx){ clearInterval(cdInterval); rerender(); return; }
+    const d=itemInstant(nx); if(!d){ t.textContent="—"; return; }
+    let diff=d.getTime()-Date.now();
+    if(diff<=0){ rerender(); return; }
+    const dd=Math.floor(diff/864e5); diff-=dd*864e5;
+    const hh=Math.floor(diff/36e5); diff-=hh*36e5;
+    const mm=Math.floor(diff/6e4); const ss=Math.floor((diff-mm*6e4)/1000);
+    t.textContent=(dd>0?dd+"d ":"")+String(hh).padStart(2,"0")+"h "+String(mm).padStart(2,"0")+"m "+String(ss).padStart(2,"0")+"s";
+  };
+  upd(); cdInterval=setInterval(upd,1000);
+}
 function todayView(){
   const st=tripStatus(T);
   let html="";
   if(st==="active"){
     const d=dayNumber(T),n=tripDays(T);
     html+=`<div style="margin-bottom:12px"><span class="pill gold">${esc(T.emoji)} Day ${d} of ${n}${T.dest?" · "+esc(T.dest):""}</span></div>`;
+    html+=companionChips();
+    html+=upNextCard();
     // today's plan
     if(T.modules.planner){
       const items=T.planItems.filter(p=>p.date===todayISO()).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99"));
@@ -433,6 +706,8 @@ function todayView(){
     html+=`<div class="card" style="text-align:center"><div class="tiny muted" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Departure in</div>
       <div class="bignum">${d} day${d===1?"":"s"}</div>
       <div class="small muted">${prettyDate(T.start,true)} → ${prettyDate(T.end,true)} · ${tripDays(T)} days</div></div>`;
+    html+=companionChips();
+    html+=upNextCard();
     if(T.modules.lists&&T.lists.length){
       html+=`<div class="card"><h3>✅ Getting ready</h3>`;
       T.lists.forEach(l=>{
@@ -498,7 +773,18 @@ function planItemHtml(p){
     <div class="pt" onclick="openPlanItem('${p.id}')">${p.time?`<span class="ptime">${esc(p.time)}</span> `:""}${esc(p.text)}${p.note?`<div class="tiny muted">${esc(p.note)}</div>`:""}</div>
   </div>`;
 }
+let planSeg="days";
 function planView(){
+  const segs=[];
+  if(T.modules.planner) segs.push(["days","🗓️ Days"]);
+  if(T.modules.timeline){ segs.push(["bookings","🎫 Bookings"]); segs.push(["airports","🛃 Airports"]); }
+  if(!segs.some(s=>s[0]===planSeg)) planSeg=segs.length?segs[0][0]:"days";
+  let html=segs.length>1?`<div class="seg">${segs.map(s=>`<button class="${planSeg===s[0]?'on':''}" onclick="planSeg='${s[0]}';rerender()">${s[1]}</button>`).join("")}</div>`:"";
+  if(planSeg==="bookings") return html+timelineView();
+  if(planSeg==="airports") return html+airportsView();
+  return html+daysView();
+}
+function daysView(){
   if(!T.start||!T.end) return `<div class="empty"><span class="ei">🗓️</span>Set your trip dates first<br>(More → Trip settings), then plan each day.</div>`;
   const n=tripDays(T);
   let html="";
@@ -540,18 +826,313 @@ function extendTrip(){
 }
 
 /* ============================================================
+   BOOKINGS timeline (flights/hotels/trains + journeys + layovers)
+   ============================================================ */
+const TYPE_ICON={Flight:"✈️",Hotel:"🏨",Train:"🚆",Activity:"🎫",Other:"📌"};
+function itemInstant(it){
+  if(it.type==="Flight") return zonedToDate(it.depTime,it.depTz);
+  if(it.type==="Hotel") return zonedToDate((it.checkIn||"")+"T14:00",T.destTz||homeTz());
+  return zonedToDate(it.when,it.tz||T.destTz||homeTz());
+}
+function sortedItems(){
+  return [...T.tripItems].sort((a,b)=>{ const da=itemInstant(a),db=itemInstant(b); return (da?da.getTime():8e15)-(db?db.getTime():8e15); });
+}
+function nextItem(){
+  const now=Date.now();
+  return sortedItems().find(it=>{ const d=itemInstant(it); return d&&d.getTime()>now; });
+}
+function itemTitle(it){
+  if(it.type==="Flight") return (it.airline||"Flight")+" "+(it.flightNo||"")+" · "+(it.from||"?")+" → "+(it.to||"?");
+  if(it.type==="Hotel") return it.name||"Hotel";
+  return it.title||it.type;
+}
+function itemSub(it){
+  if(it.type==="Flight"){ let s=[]; if(it.depTerminal) s.push("Terminal "+it.depTerminal); if(it.gate) s.push("Gate "+it.gate); if(it.seat) s.push("Seat "+it.seat); return s.join(" · ")||"Tap for details"; }
+  if(it.type==="Hotel") return (it.checkIn||"")+(it.checkOut?" → "+it.checkOut:"");
+  return it.notes||"";
+}
+function connGapMs(a,b){ const pa=zonedToDate(a.arrTime,a.arrTz), cd=zonedToDate(b.depTime,b.depTz); return (pa&&cd)?(cd-pa):null; }
+function itemDateKey(it){ const s=it.type==="Flight"?it.depTime:(it.type==="Hotel"?it.checkIn:it.when); return (s||"").slice(0,10); }
+function timelineView(){
+  let html=`<div class="fab-actions">
+    <button class="btn ghost sm" onclick="openTripItem(null,'Flight')">✈️ Flight</button>
+    <button class="btn ghost sm" onclick="openTripItem(null,'Hotel')">🏨 Hotel</button>
+    <button class="btn ghost sm" onclick="openTripItem(null,'Train')">🚆 Train</button>
+    <button class="btn ghost sm" onclick="openTripItem(null,'Activity')">🎫 Activity</button>
+    <button class="btn ghost sm" onclick="openTripItem(null,'Other')">📌 Other</button>
+  </div>`;
+  const items=sortedItems();
+  if(!items.length) return html+`<div class="empty"><span class="ei">🎫</span>No bookings yet.<br>Add flights, hotels and trains above.</div>`;
+  // journeys = runs of consecutive flights joined by a 0–24h layover
+  const gaps=items.map((it,i)=>(i>0&&it.type==="Flight"&&items[i-1].type==="Flight")?connGapMs(items[i-1],it):null);
+  const J=[]; let jid=-1;
+  items.forEach((it,i)=>{
+    if(it.type!=="Flight"){ J.push(-1); return; }
+    const linked=i>0&&items[i-1].type==="Flight"&&gaps[i]!==null&&gaps[i]>0&&gaps[i]<24*36e5;
+    J.push(linked?J[i-1]:++jid);
+  });
+  const legsOf={}; items.forEach((it,i)=>{ if(it.type==="Flight") (legsOf[J[i]]=legsOf[J[i]]||[]).push(i); });
+  const code=s=>(s||"").split("/")[0].trim();
+  let lastDate="";
+  items.forEach((it,i)=>{
+    const when=it.type==="Flight"?fmtZoned(it.depTime,it.depTz):(it.type==="Hotel"?(it.checkIn||""):fmtZoned(it.when,T.destTz||homeTz()));
+    const dk=itemDateKey(it);
+    if(dk&&dk!==lastDate){ lastDate=dk; html+=`<div class="grouphdr" style="margin-top:4px">${esc(prettyDate(dk))}</div>`; }
+    const legs=it.type==="Flight"?legsOf[J[i]]:null;
+    let jhdr="",legPill="";
+    if(legs&&legs.length>1){
+      const pos=legs.indexOf(i);
+      legPill=`<span class="pill grey">Leg ${pos+1} of ${legs.length}</span>`;
+      if(pos===0){
+        const f=items[legs[0]], l=items[legs[legs.length-1]];
+        const route=[code(f.from)].concat(legs.map(x=>code(items[x].to))).filter(Boolean).join(" → ");
+        const t0=zonedToDate(f.depTime,f.depTz), t1=zonedToDate(l.arrTime,l.arrTz);
+        const tot=(t0&&t1&&t1>t0)?" · "+fmtDur(t1-t0)+" total":"";
+        jhdr=`<div class="small" style="font-weight:800;color:var(--accent);margin-bottom:6px">✈️ ${esc(route)}${esc(tot)}</div>`;
+      }
+    }
+    let conn="";
+    if(i>0&&it.type==="Flight"&&items[i-1].type==="Flight"&&gaps[i]!==null){
+      const gap=gaps[i];
+      if(gap>0&&gap<24*36e5){
+        const tight=gap<75*6e4;
+        conn=`<div style="margin-bottom:8px"><span class="pill ${tight?'warn':'gold'}">⏱ ${fmtDur(gap)} layover${it.from?" in "+esc(code(it.from)):""}${tight?" — tight!":""}</span></div>`;
+      } else if(gap<=0&&gap>-24*36e5){
+        conn=`<div style="margin-bottom:8px"><span class="pill warn">⚠️ times overlap — check these legs' time zones</span></div>`;
+      }
+    }
+    const lineAfter=i<items.length-1&&itemDateKey(items[i+1])===dk;
+    html+=`<div class="tl-item"><div class="tl-rail"><div class="tl-dot"></div>${lineAfter?'<div class="tl-line"></div>':''}</div>
+      <div class="tl-body">${jhdr}${conn}<div class="card tap" onclick="openTripItem('${it.id}')" style="margin-bottom:0">
+        <div class="row between"><span class="row" style="gap:6px"><span class="pill">${TYPE_ICON[it.type]} ${esc(it.type)}</span>${legPill}</span><span class="tiny muted">${esc(when)}</span></div>
+        <h3 style="margin:8px 0 2px">${esc(itemTitle(it))}</h3>
+        <div class="small muted">${esc(itemSub(it))}</div>
+        ${(it.attachments&&it.attachments.length)?`<div class="tiny muted" style="margin-top:6px">📎 ${it.attachments.length} attachment(s)</div>`:""}
+      </div></div></div>`;
+  });
+  return html;
+}
+function tripFields(type){
+  if(type==="Flight") return [
+    {key:"airline",label:"Airline"},
+    {key:"flightNo",label:"Flight number"},
+    {key:"from",label:"From (airport)"},
+    {key:"to",label:"To (airport)"},
+    {key:"depTime",label:"Departure date & time",type:"datetime-local"},
+    {key:"depTz",label:"Departure time zone",type:"tz",default:homeTz()},
+    {key:"arrTime",label:"Arrival date & time",type:"datetime-local"},
+    {key:"arrTz",label:"Arrival time zone",type:"tz",default:T.destTz||homeTz()},
+    {key:"depTerminal",label:"Departure terminal"},
+    {key:"arrTerminal",label:"Arrival terminal"},
+    {key:"gate",label:"Gate"},
+    {key:"seat",label:"Seat"},
+    {key:"pnr",label:"Booking reference (PNR)"},
+    {key:"notes",label:"Notes",type:"textarea"}
+  ];
+  if(type==="Hotel") return [
+    {key:"name",label:"Hotel name"},
+    {key:"address",label:"Address"},
+    {key:"addressLocal",label:"Address in local language (to show drivers)",type:"textarea"},
+    {key:"checkIn",label:"Check-in date",type:"date"},
+    {key:"checkOut",label:"Check-out date",type:"date"},
+    {key:"conf",label:"Confirmation number"},
+    {key:"phone",label:"Phone"},
+    {key:"notes",label:"Notes",type:"textarea"}
+  ];
+  return [
+    {key:"title",label:"Title",placeholder:type},
+    {key:"when",label:"Date & time",type:"datetime-local"},
+    {key:"from",label:"From / Location"},
+    {key:"to",label:"To (if applicable)"},
+    {key:"ref",label:"Reference / Booking no."},
+    {key:"notes",label:"Notes",type:"textarea"}
+  ];
+}
+function openTripItem(id,type){
+  const it=id?T.tripItems.find(x=>x.id===id):null;
+  if(id&&it){ openTripDetail(it); return; }
+  type=type||"Other";
+  openForm("New "+type,tripFields(type),{type},o=>{
+    o.id=uid(); o.type=type; o.attachments=[];
+    T.tripItems.push(o); saveTrip(); rerender(); toast(type+" added");
+  });
+}
+function openTripDetail(it){
+  const kv=(k,label,val,type)=>`<div class="kv"><div class="k">${esc(label)}</div><div class="v editable ${val?'':'empty-val'}" onclick="editItemField('${it.id}','${k}','${esc(label)}','${type||'text'}')">${esc(val||"Tap to add")}</div></div>`;
+  let body="";
+  if(it.type==="Flight"){
+    body=kv("airline","Airline",it.airline)+kv("flightNo","Flight no",it.flightNo)+
+      kv("from","From",it.from)+kv("to","To",it.to)+
+      `<div class="kv"><div class="k">Departs</div><div class="v">${esc(fmtZoned(it.depTime,it.depTz)||"—")} <span class="tiny muted">${esc(it.depTz||"")}</span></div></div>`+
+      `<div class="kv"><div class="k">Arrives</div><div class="v">${esc(fmtZoned(it.arrTime,it.arrTz)||"—")} <span class="tiny muted">${esc(it.arrTz||"")}</span></div></div>`+
+      kv("depTerminal","Dep. terminal",it.depTerminal)+kv("arrTerminal","Arr. terminal",it.arrTerminal)+
+      kv("gate","Gate",it.gate)+kv("seat","Seat",it.seat)+kv("pnr","PNR",it.pnr)+kv("notes","Notes",it.notes,"textarea");
+  } else if(it.type==="Hotel"){
+    body=kv("name","Name",it.name)+
+      `<div class="kv"><div class="k">Address</div><div class="v">${esc(it.address||"—")}${it.address?` <button class="btn sm ghost" style="margin-top:6px" onclick="copyHotelAddr('${it.id}')">📋 Copy</button>`:""}<div class="editable tiny muted" onclick="editItemField('${it.id}','address','Address','textarea')" style="margin-top:4px">✎ edit</div></div></div>`+
+      `<div class="kv"><div class="k">Local addr.</div><div class="v">${esc(it.addressLocal||"—")}${it.addressLocal?` <button class="btn sm ghost" style="margin-top:6px" onclick="showHotelAddrLocal('${it.id}')">🔎 Show driver</button>`:""}<div class="editable tiny muted" onclick="editItemField('${it.id}','addressLocal','Address in local language','textarea')" style="margin-top:4px">✎ edit</div></div></div>`+
+      kv("checkIn","Check-in",it.checkIn,"date")+kv("checkOut","Check-out",it.checkOut,"date")+
+      kv("conf","Confirmation",it.conf)+kv("phone","Phone",it.phone)+kv("notes","Notes",it.notes,"textarea");
+  } else {
+    body=kv("title","Title",it.title)+
+      `<div class="kv"><div class="k">When</div><div class="v editable ${it.when?'':'empty-val'}" onclick="editItemField('${it.id}','when','Date & time','datetime-local')">${esc(fmtZoned(it.when,T.destTz||homeTz())||"Tap to add")}</div></div>`+
+      kv("from","From/Location",it.from)+kv("to","To",it.to)+kv("ref","Reference",it.ref)+kv("notes","Notes",it.notes,"textarea");
+  }
+  const atts=(it.attachments||[]);
+  const attHtml=atts.length?`<div class="vgrid" id="attGrid_${it.id}">`+atts.map(a=>`<div class="vcell"><img data-imgid="${a.id}" onclick="fullscreenImage('${a.id}')" alt="${esc(a.label||'')}"><button class="vdel" onclick="detachFile('${it.id}','${a.id}')">✕</button><div class="vlabel tiny">${esc(a.label||'Attachment')}</div></div>`).join("")+`</div>`:`<p class="muted small">No attachments yet.</p>`;
+  $("#modal-root").innerHTML=`<div class="modal-back"><div class="modal"><div class="modal-grab"></div>
+    <div class="row between"><h2>${TYPE_ICON[it.type]} ${esc(itemTitle(it))}</h2></div>
+    <div class="card" style="box-shadow:none;margin:6px 0 4px">${body}</div>
+    <h3 style="margin-top:14px">📎 Attachments</h3>
+    <p class="tiny muted">Photos of tickets & confirmations.</p>
+    ${attHtml}
+    <label class="btn ghost block" style="margin-top:10px;cursor:pointer">📷 Add photo/ticket<input type="file" accept="image/*" style="display:none" onchange="attachFile('${it.id}',this)"></label>
+    <div class="modal-actions"><button class="btn warn" onclick="deleteTripItem('${it.id}')">Delete</button><button class="btn" onclick="closeModal()">Done</button></div>
+  </div></div>`;
+  modalDismiss=null;
+  $("#modal-root .modal-back").addEventListener("click",e=>{ if(e.target===e.currentTarget) closeModal(); });
+  loadAttImages(it.id);
+}
+async function loadAttImages(itemId){
+  const it=T.tripItems.find(x=>x.id===itemId); if(!it) return;
+  await Promise.all((it.attachments||[]).map(async a=>{ const url=await DB.get(a.id); const img=document.querySelector(`#attGrid_${itemId} img[data-imgid="${a.id}"]`); if(img&&url) img.src=url; }));
+}
+function editItemField(id,key,label,type){
+  const it=T.tripItems.find(x=>x.id===id); if(!it) return;
+  editField(label,it[key]||"",v=>{ it[key]=v; saveTrip(); openTripDetail(it); rerender(); },type);
+}
+function copyText(t){ navigator.clipboard?.writeText(t).then(()=>toast("Copied"),()=>toast("Copy failed")); }
+function copyHotelAddr(id){ const it=T.tripItems.find(x=>x.id===id); if(it&&it.address) copyText(it.address); }
+function showHotelAddrLocal(id){ const it=T.tripItems.find(x=>x.id===id); if(it&&it.addressLocal) fullscreenAddr(it.addressLocal); }
+function deleteTripItem(id){
+  if(!confirm("Delete this booking?")) return;
+  const it=T.tripItems.find(x=>x.id===id);
+  if(it&&it.attachments) it.attachments.forEach(a=>DB.del(a.id));
+  T.tripItems=T.tripItems.filter(x=>x.id!==id);
+  T.airportCards.forEach(c=>{ if(c.linkedItemId===id) c.linkedItemId=null; });
+  saveTrip(); closeModal(); rerender(); toast("Deleted");
+}
+async function attachFile(itemId,input){
+  const file=input.files[0]; if(!file) return;
+  try{
+    const dataUrl=await compressImage(file);
+    const imgId=uid();
+    await DB.put(imgId,dataUrl);
+    const it=T.tripItems.find(x=>x.id===itemId);
+    it.attachments=it.attachments||[]; it.attachments.push({id:imgId,label:file.name.slice(0,24)});
+    saveTrip(); openTripDetail(it); toast("Attached");
+  }catch(e){ toast("⚠️ Could not add image"); }
+}
+async function detachFile(itemId,imgId){
+  if(!confirm("Remove this attachment?")) return;
+  await DB.del(imgId);
+  const it=T.tripItems.find(x=>x.id===itemId);
+  it.attachments=(it.attachments||[]).filter(a=>a.id!==imgId);
+  saveTrip(); openTripDetail(it);
+}
+
+/* ---------------- airport / layover cards ---------------- */
+function airportsView(){
+  let html=`<button class="btn ghost block" onclick="openAirportCard()" style="margin-bottom:14px">➕ New airport / layover card</button>`;
+  if(!T.airportCards.length) return html+`<div class="empty"><span class="ei">🛃</span>No airport cards yet.<br>Create step-by-step guides for each airport.</div>`;
+  T.airportCards.forEach(c=>{
+    const steps=c.steps||[];
+    const doneCount=steps.filter(s=>s.done).length;
+    const linked=c.linkedItemId?T.tripItems.find(x=>x.id===c.linkedItemId):null;
+    html+=`<div class="card">
+      <div class="row between"><h3>🛃 ${esc(c.name||"Airport")} ${c.terminal?`<span class="pill">T${esc(c.terminal)}</span>`:""}</h3>
+        <button class="iconbtn" onclick="editAirportMeta('${c.id}')">✎</button></div>
+      ${linked?`<div class="tiny muted">Linked: ${esc(itemTitle(linked))}</div>`:""}
+      ${c.minConn?`<div class="note" style="margin:8px 0">⏱️ ${esc(c.minConn)}</div>`:""}
+      <div style="margin-top:10px">${steps.map(s=>`<div class="step ${s.done?'done':''}" onclick="toggleStep('${c.id}','${s.id}')"><div class="box">${s.done?'✓':''}</div><div class="txt">${esc(s.text)}</div><button class="iconbtn" style="width:32px;height:32px" onclick="event.stopPropagation();editStep('${c.id}','${s.id}')">✎</button></div>`).join("")||'<p class="muted small">No steps yet.</p>'}</div>
+      <button class="btn ghost sm" style="margin-top:6px" onclick="addStep('${c.id}')">➕ Add step</button>
+      <div class="divider"></div><label style="margin-top:0">Scratchpad</label>
+      <div class="editable small ${c.scratch?'':'empty-val'}" onclick="editCardField('${c.id}','scratch','Scratchpad','textarea')">${esc(c.scratch||"Tap to jot notes")}</div>
+      <div class="row" style="margin-top:12px;gap:8px">
+        <button class="btn grey sm" onclick="resetSteps('${c.id}')">↺ Reset ticks (${doneCount}/${steps.length})</button>
+      </div>
+    </div>`;
+  });
+  return html;
+}
+function flightOpts(){ return [["","(not linked)"]].concat(T.tripItems.filter(i=>i.type==="Flight").map(i=>[i.id,itemTitle(i)])); }
+function openAirportCard(){
+  openForm("Airport / layover card",[
+    {key:"name",label:"Airport name / code"},
+    {key:"terminal",label:"Terminal"},
+    {key:"minConn",label:"Connection notes",placeholder:"Min 60 min for transfer"},
+    {key:"linkedItemId",label:"Link to flight",type:"select",options:flightOpts()},
+    {key:"scratch",label:"Scratchpad",type:"textarea"}
+  ],{},o=>{ o.id=uid(); o.steps=[]; T.airportCards.push(o); saveTrip(); rerender(); toast("Card created"); });
+}
+function editAirportMeta(id){
+  const c=T.airportCards.find(x=>x.id===id); if(!c) return;
+  openForm("Edit card",[
+    {key:"name",label:"Airport name / code"},
+    {key:"terminal",label:"Terminal"},
+    {key:"minConn",label:"Connection notes"},
+    {key:"linkedItemId",label:"Link to flight",type:"select",options:flightOpts()},
+    {key:"scratch",label:"Scratchpad",type:"textarea"}
+  ],c,o=>{ Object.assign(c,o); saveTrip(); rerender(); },{onDelete:()=>{ T.airportCards=T.airportCards.filter(x=>x.id!==id); saveTrip(); rerender(); }});
+}
+function editCardField(id,key,label,type){ const c=T.airportCards.find(x=>x.id===id); editField(label,c[key]||"",v=>{c[key]=v;saveTrip();rerender();},type); }
+function addStep(id){ const c=T.airportCards.find(x=>x.id===id); editField("New step","",v=>{ if(v){ c.steps.push({id:uid(),text:v,done:false}); saveTrip(); rerender();} },"textarea"); }
+function editStep(cid,sid){ const c=T.airportCards.find(x=>x.id===cid); const s=c.steps.find(x=>x.id===sid); editField("Edit step",s.text,v=>{ if(v){s.text=v;} else {c.steps=c.steps.filter(x=>x.id!==sid);} saveTrip(); rerender(); },"textarea"); }
+function toggleStep(cid,sid){ const c=T.airportCards.find(x=>x.id===cid); const s=c.steps.find(x=>x.id===sid); s.done=!s.done; saveTrip(); rerender(); }
+function resetSteps(id){ const c=T.airportCards.find(x=>x.id===id); c.steps.forEach(s=>s.done=false); saveTrip(); rerender(); toast("Ticks reset"); }
+
+/* ============================================================
    MONEY (single-currency budget, phase 1)
    ============================================================ */
 const CATS=["Food","Transport","Stay","Shopping","Sightseeing","Other"];
+const isForeign=()=>T.currency!==homeCur();
+function inHome(n){ return (+T.rate&&isForeign())?` <span class="tiny muted">≈ ${esc(homeCur())}${Math.round((Number(n)||0)*T.rate).toLocaleString("en-IN")}</span>`:""; }
+let moneySeg="spend";
 function moneyView(){
+  if(!isForeign()) moneySeg="spend";
+  let html=isForeign()?`<div class="seg">
+    <button class="${moneySeg==='spend'?'on':''}" onclick="moneySeg='spend';rerender()">Spend</button>
+    <button class="${moneySeg==='convert'?'on':''}" onclick="moneySeg='convert';rerender()">Convert</button>
+  </div>`:"";
+  if(moneySeg==="convert") return html+convertView();
+  return html+spendView();
+}
+function convertView(){
+  const r=+T.rate||0;
+  let html=`<div class="card">
+    <div class="row between"><h3>💱 ${esc(T.currency)} ↔ ${esc(homeCur())}</h3></div>
+    ${r?`<p class="tiny muted">at rate saved on ${esc(T.rateDate||"?")} · ${esc(T.currency)}1 = ${esc(homeCur())}${esc(T.rate)}</p>`:`<p class="tiny muted">No rate saved yet — set one below.</p>`}
+    <label>${esc(T.currency)} (trip currency)</label>
+    <input type="number" inputmode="decimal" id="convA" placeholder="0" oninput="convFrom('a')" style="font-size:1.6rem;font-weight:800;text-align:right">
+    <div style="text-align:center;color:var(--muted);margin:6px 0">⇅</div>
+    <label>${esc(homeCur())} (home currency)</label>
+    <input type="number" inputmode="decimal" id="convB" placeholder="0" oninput="convFrom('b')" style="font-size:1.6rem;font-weight:800;text-align:right">
+    <button class="btn ghost block" style="margin-top:14px" onclick="editRate()">✎ Update saved rate</button>
+  </div>
+  <div class="note">The app never fetches rates. Check the live rate online, then save it here whenever you like.</div>`;
+  return html;
+}
+function convFrom(which){
+  const r=+T.rate||0; if(!r) return;
+  if(which==="a"){ const v=parseFloat($("#convA").value); $("#convB").value=isNaN(v)?"":(v*r).toFixed(2); }
+  else{ const v=parseFloat($("#convB").value); $("#convA").value=isNaN(v)?"":(v/r).toFixed(2); }
+}
+function editRate(){
+  openForm("Saved exchange rate",[
+    {key:"rate",label:esc(T.currency)+"1 = how many "+esc(homeCur())+"?",type:"number",default:T.rate},
+    {key:"rateDate",label:"Date checked",type:"date",default:todayISO()}
+  ],{rate:T.rate,rateDate:T.rateDate||todayISO()},o=>{ T.rate=o.rate; T.rateDate=o.rateDate; saveTrip(); rerender(); toast("Rate updated"); });
+}
+function spendView(){
   const pd=+T.budget.perDiem||0, total=+T.budget.total||0;
   let html=`<div class="card">
     <h3>Budget</h3>
     <div class="kv"><div class="k">Trip budget</div><div class="v editable ${total?'':'empty-val'}" onclick="editBudget('total')">${total?fmt(total):"Tap to set"}</div></div>
     <div class="kv"><div class="k">Per diem</div><div class="v editable ${pd?'':'empty-val'}" onclick="editBudget('perDiem')">${pd?fmt(pd)+" / day":"Tap to set"}</div></div>
-    ${total?`<div class="stat" style="margin-top:6px"><span>Spent so far</span><span class="sv">${fmt(tripSpend())}</span></div>
+    ${total?`<div class="stat" style="margin-top:6px"><span>Spent so far</span><span class="sv">${fmt(tripSpend())}${inHome(tripSpend())}</span></div>
     <div class="storagebar"><div style="width:${Math.min(100,tripSpend()/(total||1)*100)}%;background:${tripSpend()>total?'var(--warn)':'var(--accent)'}"></div></div>
-    <div class="stat"><span>${tripSpend()>total?"Over budget by":"Remaining"}</span><span class="sv" style="color:${tripSpend()>total?'var(--warn)':'var(--good)'}">${fmt(Math.abs(total-tripSpend()))}</span></div>`:""}
+    <div class="stat"><span>${tripSpend()>total?"Over budget by":"Remaining"}</span><span class="sv" style="color:${tripSpend()>total?'var(--warn)':'var(--good)'}">${fmt(Math.abs(total-tripSpend()))}</span></div>`:
+    `<div class="stat" style="margin-top:6px"><span>Spent so far</span><span class="sv">${fmt(tripSpend())}${inHome(tripSpend())}</span></div>`}
   </div>`;
   if(pd){
     const spent=todaySpendT(), rem=pd-spent;
@@ -695,10 +1276,26 @@ function addPastLog(){ editField("Entry date","",v=>{ if(v) openLogEntry(v); },"
 /* ============================================================
    MORE (settings, modules, export, danger)
    ============================================================ */
-const MODULE_INFO=[["planner","🗓️ Day planner","Day-by-day itinerary"],["budget","💰 Budget & expenses","Spending, per diem, CSV"],["lists","✅ Lists","Packing, to-buy, to-do"],["journal","📓 Journal","Daily notes & moods"]];
+const MODULE_INFO=[["planner","🗓️ Day planner","Day-by-day itinerary"],["timeline","🎫 Bookings & airports","Flights, hotels, layover cards"],["budget","💰 Budget & expenses","Spending, per diem, CSV"],["lists","✅ Lists","Packing, to-buy, to-do"],["journal","📓 Journal","Daily notes & moods"]];
+let moreSub=null;
+function moreOpen(v){ moreSub=v; rerender(); window.scrollTo(0,0); }
+function moreBack(){ moreSub=null; rerender(); }
 function moreView(){
+  const back=`<button class="btn grey sm" onclick="moreBack()" style="margin-bottom:12px">‹ More</button>`;
+  if(moreSub==="people") return back+peopleView();
+  if(moreSub==="phrasebook") return back+phrasebookView();
+  if(moreSub==="docs") return back+docsView();
+  if(moreSub==="emergency") return back+emergencyView();
   const t=T;
-  let html=`<div class="card">
+  const compNames=t.companions.map(id=>personById(id)).filter(Boolean).map(p=>p.name);
+  const menu=[
+    ["people","👥","People & operator", t.operator.name?("via "+t.operator.name):(compNames.length?("With "+compNames.slice(0,2).join(", ")+(compNames.length>2?" +"+(compNames.length-2):"")):"Solo trip — add companions")],
+    ["phrasebook","💬","Phrasebook", t.language?(t.language+" phrases"):"Set a language in Trip settings first"],
+    ["docs","🗂️","Documents", "Passport, visa, tickets — shared across trips"],
+    ["emergency","🆘","Emergency card", "Numbers, insurance, hotel, contacts"]
+  ];
+  let html=menu.map(m=>`<div class="card tap" onclick="moreOpen('${m[0]}')"><div class="row"><span style="font-size:1.6rem">${m[1]}</span><div style="flex:1;min-width:0"><h3 style="margin:0">${m[2]}</h3><div class="small muted">${esc(m[3])}</div></div><span class="muted">›</span></div></div>`).join("");
+  html+=`<div class="card">
     <h3>Trip settings</h3>
     <div class="kv"><div class="k">Name</div><div class="v editable" onclick="editTripField('name','Trip name')">${esc(t.name)}</div></div>
     <div class="kv"><div class="k">Emoji</div><div class="v editable" onclick="editTripField('emoji','Emoji')">${esc(t.emoji)}</div></div>
@@ -706,6 +1303,9 @@ function moreView(){
     <div class="kv"><div class="k">Start</div><div class="v editable ${t.start?'':'empty-val'}" onclick="editTripField('start','Start date','date')">${esc(t.start||"Tap to set")}</div></div>
     <div class="kv"><div class="k">End</div><div class="v editable ${t.end?'':'empty-val'}" onclick="editTripField('end','End date','date')">${esc(t.end||"Tap to set")}</div></div>
     <div class="kv"><div class="k">Currency</div><div class="v editable" onclick="editCurrency()">${esc(t.currency)}</div></div>
+    <div class="kv"><div class="k">Dest. zone</div><div class="v editable ${t.destTz?'':'empty-val'}" onclick="editDestTz()">${t.destTz?esc(t.destTz):"Same as home"}</div></div>
+    <div class="kv"><div class="k">Language</div><div class="v editable ${t.language?'':'empty-val'}" onclick="editTripField('language','Local language (e.g. German)')">${esc(t.language||"Tap to set")}</div></div>
+    ${isForeign()?`<div class="kv"><div class="k">Rate</div><div class="v editable ${t.rate?'':'empty-val'}" onclick="editRate()">${t.rate?esc(t.currency)+"1 = "+esc(homeCur())+esc(t.rate)+" ("+esc(t.rateDate||"?")+")":"Tap to save a rate"}</div></div>`:""}
   </div>
   <div class="note" style="margin-bottom:14px">To <b>extend the trip</b>, just change the end date — the day planner and budget follow automatically.</div>
   <div class="card"><h3>Modules</h3><p class="tiny muted">Switch parts of the app on or off for this trip. Nothing is deleted when off — it just hides.</p>`;
@@ -733,6 +1333,187 @@ function editTripField(key,label,type){
 function editCurrency(){
   openForm("Currency",[{key:"c",label:"Currency symbol",type:"select",options:CURRENCIES,default:T.currency}],{c:T.currency},o=>{ T.currency=o.c; saveTrip(); rerender(); });
 }
+function editDestTz(){
+  const opts=[["","— same as home —"]].concat(TZ_OPTS.map(z=>[z,z.replace("Etc/","").replace(/_/g," ")]));
+  if(T.destTz&&!TZ_OPTS.includes(T.destTz)) opts.splice(1,0,[T.destTz,T.destTz]);
+  openForm("Destination time zone",[{key:"z",label:"Zone (pick one if abroad)",type:"select",options:opts,default:T.destTz}],{z:T.destTz},o=>{ T.destTz=o.z; saveTrip(); render(); });
+}
+
+/* ---------------- People & tour operator ---------------- */
+function peopleView(){
+  const comps=T.companions.map(id=>personById(id)).filter(Boolean);
+  let html=`<div class="screen-title" style="font-size:1.3rem">👥 People & operator</div>
+    <div class="card"><h3>Travelling with</h3>`;
+  if(!comps.length) html+=`<p class="muted small">Solo trip so far. Add your partner, family or group below.</p>`;
+  else html+=`<div style="margin:8px 0">`+comps.map(p=>`<span class="pchip" onclick="editPerson('${p.id}')">${esc(p.name)}${p.phone?" 📞":""}</span>`).join("")+`</div>
+    <p class="tiny muted">Tap a person to edit or remove them.</p>`;
+  html+=`<button class="btn ghost block" style="margin-top:8px" onclick="addCompanion()">➕ Add companion</button></div>`;
+  const op=T.operator;
+  html+=`<div class="card"><h3>🚌 Tour operator <span class="tiny muted">(if organized)</span></h3>
+    <div class="kv"><div class="k">Company</div><div class="v editable ${op.name?'':'empty-val'}" onclick="editOperator('name','Operator company')">${esc(op.name||"Tap to set")}</div></div>
+    <div class="kv"><div class="k">Contact person</div><div class="v editable ${op.contact?'':'empty-val'}" onclick="editOperator('contact','Contact person')">${esc(op.contact||"Tap to set")}</div></div>
+    <div class="kv"><div class="k">Phone</div><div class="v editable ${op.phone?'':'empty-val'}" onclick="editOperator('phone','Operator phone')">${esc(op.phone||"Tap to set")}</div></div>
+    <div class="kv"><div class="k">Booking ref</div><div class="v editable ${op.ref?'':'empty-val'}" onclick="editOperator('ref','Booking reference')">${esc(op.ref||"Tap to set")}</div></div>
+    <div class="kv"><div class="k">Notes</div><div class="v editable ${op.note?'':'empty-val'}" onclick="editOperator('note','Notes','textarea')">${esc(op.note||"Pickup point, reporting time…")}</div></div>
+  </div>
+  <p class="tiny muted">People are saved once and reusable on every trip — your bridge partner is one tap away next time.</p>`;
+  return html;
+}
+function addCompanion(){
+  const existing=SHARED.people.filter(p=>!T.companions.includes(p.id));
+  const opts=[["new","➕ New person…"]].concat(existing.map(p=>[p.id,p.name]));
+  openForm("Add companion",[
+    {key:"who",label:"Person",type:"select",options:opts,default:existing.length?existing[0].id:"new"},
+    {key:"name",label:"Name (if new)"},
+    {key:"phone",label:"Phone (if new)"}
+  ],{},o=>{
+    let pid=o.who;
+    if(pid==="new"){
+      if(!o.name){ toast("Give them a name"); return; }
+      const p={id:uid(),name:o.name,phone:o.phone||"",note:""};
+      SHARED.people.push(p); saveShared(); pid=p.id;
+    }
+    if(!T.companions.includes(pid)) T.companions.push(pid);
+    saveTrip(); rerender();
+  });
+}
+function editPerson(id){
+  const p=personById(id); if(!p) return;
+  openForm("Edit person",[
+    {key:"name",label:"Name",default:p.name},
+    {key:"phone",label:"Phone",default:p.phone},
+    {key:"note",label:"Note",default:p.note,placeholder:"e.g. bridge partner, brother-in-law"}
+  ],p,o=>{ Object.assign(p,o); saveShared(); rerender(); },
+  {onDelete:()=>{ T.companions=T.companions.filter(x=>x!==id); saveTrip(); rerender(); toast("Removed from this trip (still in your people directory)"); }});
+}
+function editOperator(key,label,type){ editField(label,T.operator[key]||"",v=>{ T.operator[key]=v; saveTrip(); rerender(); },type); }
+
+/* ---------------- Phrasebook (shared per language) ---------------- */
+function seedGermanPack(){
+  const g=(group,arr)=>arr.map(a=>({id:uid(),group,en:a[0],nat:a[1],ph:a[2]}));
+  return [].concat(
+    g("Basics",[["Hello","Hallo","HAH-loh"],["Please","Bitte","BIT-uh"],["Thank you","Danke","DAHN-kuh"],["Yes / No","Ja / Nein","YAH / NINE"],["Excuse me / Sorry","Entschuldigung","ent-SHOOL-dee-goong"],["Do you speak English?","Sprechen Sie Englisch?","SHPREH-khen zee ENG-lish"],["I don't understand","Ich verstehe nicht","ikh fair-SHTAY-uh nikht"]]),
+    g("Getting around",[["Where is...?","Wo ist...?","voh ist"],["The train station","Der Bahnhof","dair BAHN-hohf"],["A ticket to...","Eine Fahrkarte nach...","EYE-nuh FAHR-kar-tuh nahkh"],["Left / Right","Links / Rechts","LINKS / REKHTS"],["Where is the toilet?","Wo ist die Toilette?","voh ist dee twa-LET-uh"]]),
+    g("Food & money",[["The menu, please","Die Speisekarte, bitte","dee SHPYE-zuh-kar-tuh BIT-uh"],["I am vegetarian","Ich bin Vegetarier","ikh bin veg-eh-TAH-ree-er"],["The bill, please","Die Rechnung, bitte","dee REKH-noong BIT-uh"],["How much does it cost?","Wie viel kostet das?","vee feel KOS-tet dahs"],["Can I pay by card?","Kann ich mit Karte zahlen?","kahn ikh mit KAR-tuh TSAH-len"]]),
+    g("Emergency",[["Help!","Hilfe!","HIL-fuh"],["I need a doctor","Ich brauche einen Arzt","ikh BROW-khuh EYE-nen ARTST"],["Call the police","Rufen Sie die Polizei","ROO-fen zee dee poh-lee-TSYE"]])
+  );
+}
+let phraseQuery="";
+function bookLang(){ return (T.language||"").trim(); }
+function phrasebookView(){
+  const lang=bookLang();
+  if(!lang) return `<div class="empty"><span class="ei">💬</span>Set the trip's language first<br>(More → Trip settings → Language).</div>`;
+  if(!SHARED.phrasebooks[lang]) SHARED.phrasebooks[lang]=[];
+  const book=SHARED.phrasebooks[lang];
+  let html=`<div class="screen-title" style="font-size:1.3rem">💬 ${esc(lang)} phrasebook</div>
+    <p class="small muted">Shared across trips — next ${esc(lang)}-speaking trip reuses it. Tap a phrase to show it full-screen.</p>`;
+  if(!book.length&&/^german|deutsch$/i.test(lang)) html+=`<button class="btn block" style="margin-bottom:10px" onclick="SHARED.phrasebooks[bookLang()]=seedGermanPack();saveShared();rerender()">✨ Start with 20 German basics</button>`;
+  html+=`<input type="search" placeholder="🔍 Search phrases…" value="${esc(phraseQuery)}" oninput="phraseSearchInput(this.value)" style="margin-bottom:8px">
+    <button class="btn ghost block" onclick="openPhrase()" style="margin-bottom:8px">➕ Add phrase</button>
+    <div id="phraseList">${phraseListHtml()}</div>`;
+  return html;
+}
+function phraseSearchInput(v){ phraseQuery=v; const el=$("#phraseList"); if(el) el.innerHTML=phraseListHtml(); }
+function phraseListHtml(){
+  const book=SHARED.phrasebooks[bookLang()]||[];
+  const q=phraseQuery.trim().toLowerCase();
+  const match=p=>!q||[p.en,p.nat,p.ph,p.group].some(x=>(x||"").toLowerCase().includes(q));
+  const groups=[...new Set(book.map(p=>p.group))];
+  let html="",any=false;
+  groups.forEach(g=>{
+    const list=book.filter(p=>p.group===g&&match(p));
+    if(!list.length) return;
+    any=true;
+    html+=`<div class="grouphdr">${esc(g)}</div>`;
+    list.forEach(p=>{
+      html+=`<div class="phrase"><div class="row between"><div onclick="showPhrase('${p.id}')" style="flex:1">
+        <div class="en">${esc(p.en)}</div><div class="de">${esc(p.nat)}</div><div class="ph">${esc(p.ph)}</div>
+        </div><button class="iconbtn" onclick="openPhrase('${p.id}')">✎</button></div></div>`;
+    });
+  });
+  if(!any) html=book.length?`<div class="empty"><span class="ei">🔍</span>No phrases match.</div>`:`<div class="empty"><span class="ei">💬</span>No phrases yet — add the ones you'll need.</div>`;
+  return html;
+}
+function showPhrase(id){ const p=(SHARED.phrasebooks[bookLang()]||[]).find(x=>x.id===id); if(p) fullscreenPhrase(p); }
+function openPhrase(id){
+  const book=SHARED.phrasebooks[bookLang()];
+  const p=id?book.find(x=>x.id===id):null;
+  const groups=[...new Set(book.map(x=>x.group))];
+  const groupOpts=groups.length?groups.concat(["＋ New group…"]):["General","＋ New group…"];
+  openForm(p?"Edit phrase":"Add phrase",[
+    {key:"en",label:"English"},
+    {key:"nat",label:bookLang()},
+    {key:"ph",label:"Pronunciation"},
+    {key:"group",label:"Group",type:"select",options:groupOpts,default:p?p.group:groupOpts[0]},
+    {key:"newGroup",label:"New group name (if chosen above)"}
+  ],p||{},o=>{
+    if(o.group==="＋ New group…") o.group=o.newGroup||(p&&p.group)||groups[0]||"General"; delete o.newGroup;
+    if(p) Object.assign(p,o); else { o.id=uid(); book.push(o); }
+    saveShared(); rerender();
+  },p?{onDelete:()=>{ SHARED.phrasebooks[bookLang()]=book.filter(x=>x.id!==id); saveShared(); rerender(); }}:null);
+}
+
+/* ---------------- Documents (shared vault) ---------------- */
+function docsView(){
+  return `<div class="screen-title" style="font-size:1.3rem">🗂️ Documents</div>
+    <p class="small muted">Your travel wallet — passport, visa, insurance. Stored once, available on every trip, works offline.</p>
+    <div class="note" id="storageNote">Checking storage…</div>
+    <label class="btn block" style="cursor:pointer;margin:12px 0">📷 Add document photo<input type="file" accept="image/*" style="display:none" onchange="addVaultImage(this)"></label>
+    ${SHARED.vaultIndex.length?`<div class="vgrid">`+SHARED.vaultIndex.map(v=>`<div class="vcell"><img data-imgid="${v.id}" onclick="fullscreenImage('${v.id}')" alt="${esc(v.label)}"><button class="vdel" onclick="deleteVault('${v.id}')">✕</button><div class="vlabel" onclick="renameVault('${v.id}')">${esc(v.label)} ✎</div></div>`).join("")+`</div>`
+      :`<div class="empty"><span class="ei">🪪</span>No documents stored.<br>Add passport, visa, insurance, tickets…</div>`}`;
+}
+async function loadVaultImages(){
+  updateStorageNote();
+  await Promise.all(SHARED.vaultIndex.map(async v=>{ const url=await DB.get(v.id); const img=document.querySelector(`.vcell img[data-imgid="${v.id}"]`); if(img&&url) img.src=url; }));
+}
+async function updateStorageNote(){
+  const note=$("#storageNote"); if(!note) return;
+  try{
+    if(navigator.storage&&navigator.storage.estimate){
+      const {usage,quota}=await navigator.storage.estimate();
+      const persisted=navigator.storage.persisted?await navigator.storage.persisted():false;
+      const mb=(usage/1048576).toFixed(1);
+      note.innerHTML=`Stored: <b>${SHARED.vaultIndex.length}</b> documents · ~${mb} MB used${persisted?' · protected ✓':''}<div class="storagebar"><div style="width:${Math.min(100,usage/quota*100)}%"></div></div>`;
+    } else note.textContent=`${SHARED.vaultIndex.length} documents stored on this device.`;
+  }catch(e){ note.textContent=`${SHARED.vaultIndex.length} documents stored.`; }
+}
+async function addVaultImage(input){
+  const file=input.files[0]; if(!file) return;
+  const labels=["Passport","Visa","Insurance","Ticket","ID card","Other / custom…"];
+  try{
+    const dataUrl=await compressImage(file);
+    openForm("Label this document",[
+      {key:"label",label:"Label",type:"select",options:labels,default:"Passport"},
+      {key:"custom",label:"Custom label (if 'Other')"}
+    ],{},async o=>{
+      const label=o.label==="Other / custom…"?(o.custom||"Document"):o.label;
+      const id=uid();
+      try{ await DB.put(id,dataUrl); SHARED.vaultIndex.push({id,label}); saveShared(); rerender(); toast("Saved to wallet"); }
+      catch(e){ toast("⚠️ Storage write failed"); }
+    });
+  }catch(e){ toast("⚠️ Could not process image"); }
+}
+async function deleteVault(id){ if(!confirm("Delete this document?"))return; await DB.del(id); SHARED.vaultIndex=SHARED.vaultIndex.filter(v=>v.id!==id); saveShared(); rerender(); }
+function renameVault(id){ const v=SHARED.vaultIndex.find(x=>x.id===id); editField("Label",v.label,val=>{ v.label=val; saveShared(); rerender(); }); }
+
+/* ---------------- Emergency card ---------------- */
+function emergencyView(){
+  let html=`<div class="screen-title" style="font-size:1.3rem">🆘 Emergency card</div>`;
+  const comps=T.companions.map(id=>personById(id)).filter(Boolean).filter(p=>p.phone);
+  html+=`<div class="card"><h3>This trip</h3>`+
+    T.emergency.fields.map(f=>`<div class="kv"><div class="k" style="width:130px">${esc(f.label)}</div><div class="v"><span class="editable ${f.value?'':'empty-val'}" onclick="editTripEmergency('${f.id}')">${esc(f.value||"Tap to fill")}</span></div></div>`).join("")+
+    (T.operator.name?`<div class="kv"><div class="k" style="width:130px">Tour operator</div><div class="v">${esc(T.operator.name)}${T.operator.phone?" · "+esc(T.operator.phone):""}</div></div>`:"")+
+    (comps.length?comps.map(p=>`<div class="kv"><div class="k" style="width:130px">${esc(p.name)}</div><div class="v">${esc(p.phone)}</div></div>`).join(""):"")+
+    `<button class="btn ghost sm" style="margin-top:8px" onclick="addTripEmergency()">➕ Add field</button></div>`;
+  html+=`<div class="card"><h3>My info <span class="tiny muted">(shared across trips)</span></h3>`+
+    SHARED.personal.fields.map(f=>`<div class="kv"><div class="k" style="width:130px">${esc(f.label)}</div><div class="v"><span class="editable ${f.value?'':'empty-val'}" onclick="editPersonal('${f.id}')">${esc(f.value||"Tap to fill")}</span></div></div>`).join("")+
+    `<button class="btn ghost sm" style="margin-top:8px" onclick="addPersonal()">➕ Add field</button></div>`;
+  return html;
+}
+function editTripEmergency(id){ const f=T.emergency.fields.find(x=>x.id===id); openForm("Edit",[{key:"label",label:"Label",default:f.label},{key:"value",label:"Value",type:"textarea",default:f.value}],f,o=>{ f.label=o.label; f.value=o.value; saveTrip(); rerender(); },{onDelete:()=>{ T.emergency.fields=T.emergency.fields.filter(x=>x.id!==id); saveTrip(); rerender(); }}); }
+function addTripEmergency(){ openForm("New field",[{key:"label",label:"Label"},{key:"value",label:"Value",type:"textarea"}],{},o=>{ o.id=uid(); T.emergency.fields.push(o); saveTrip(); rerender(); }); }
+function editPersonal(id){ const f=SHARED.personal.fields.find(x=>x.id===id); openForm("Edit",[{key:"label",label:"Label",default:f.label},{key:"value",label:"Value",type:"textarea",default:f.value}],f,o=>{ f.label=o.label; f.value=o.value; saveShared(); rerender(); },{onDelete:()=>{ SHARED.personal.fields=SHARED.personal.fields.filter(x=>x.id!==id); saveShared(); rerender(); }}); }
+function addPersonal(){ openForm("New field",[{key:"label",label:"Label"},{key:"value",label:"Value",type:"textarea"}],{},o=>{ o.id=uid(); SHARED.personal.fields.push(o); saveShared(); rerender(); }); }
 function toggleModule(m){
   T.modules[m]=!T.modules[m];
   if(tripTab===m&&!T.modules[m]) tripTab="today";
@@ -744,37 +1525,46 @@ function download(name,text,mime){
   const a=document.createElement("a"); a.href=url; a.download=name; a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-function exportTrip(){
+async function exportTrip(){
   saveTripNow();
-  download((T.name||"trip").replace(/\W+/g,"-").toLowerCase()+"-yatra.json",JSON.stringify({_app:"yatra",_kind:"trip",_version:1,trip:T}));
+  // include this trip's attachment images so it restores anywhere
+  const ids=[]; T.tripItems.forEach(it=>(it.attachments||[]).forEach(a=>ids.push(a.id)));
+  const images=[];
+  for(const id of ids){ const u=await DB.get(id); if(u) images.push({id,dataUrl:u}); }
+  download((T.name||"trip").replace(/\W+/g,"-").toLowerCase()+"-yatra.json",JSON.stringify({_app:"yatra",_kind:"trip",_version:2,trip:T,images}));
   toast("Trip exported");
 }
-function exportAll(){
+async function exportAll(){
   saveTripNow();
   const trips={};
   SHELF.trips.forEach(ix=>{ const t=loadTrip(ix.id); if(t) trips[ix.id]=t; });
-  download("yatra-backup-"+todayISO()+".json",JSON.stringify({_app:"yatra",_kind:"all",_version:1,shelf:SHELF,trips}));
+  const images=await DB.all();
+  download("yatra-backup-"+todayISO()+".json",JSON.stringify({_app:"yatra",_kind:"all",_version:2,shelf:SHELF,shared:SHARED,trips,images}));
   toast("Backup exported");
 }
 function importAll(input){
   const file=input.files[0]; if(!file) return;
   const fr=new FileReader();
-  fr.onload=()=>{
+  fr.onload=async ()=>{
     try{
       const data=JSON.parse(fr.result);
       if(data._app!=="yatra") throw new Error("not yatra");
       if(data._kind==="trip"&&data.trip){
         const t=data.trip;
         if(SHELF.trips.some(x=>x.id===t.id)&&!confirm("A trip with this id exists — overwrite it?")){ input.value=""; return; }
+        for(const im of (data.images||[])) await DB.put(im.id,im.dataUrl);
         localStorage.setItem(TRIP_PREFIX+t.id,JSON.stringify(t));
         if(!SHELF.trips.some(x=>x.id===t.id)) SHELF.trips.push({id:t.id,name:t.name,dest:t.dest,emoji:t.emoji,start:t.start,end:t.end,currency:t.currency,stats:{}});
         saveShelf(); toast("Trip imported"); exitToShelf();
       } else if(data._kind==="all"&&data.shelf){
-        if(!confirm("Importing replaces ALL trips on this device. Continue?")){ input.value=""; return; }
-        // clear existing trip keys, then restore
+        if(!confirm("Importing replaces ALL trips and wallet data on this device. Continue?")){ input.value=""; return; }
         SHELF.trips.forEach(ix=>localStorage.removeItem(TRIP_PREFIX+ix.id));
-        SHELF=data.shelf; saveShelf();
+        const old=await DB.all(); for(const im of old) await DB.del(im.id);
+        SHELF=data.shelf; if(!SHELF.settings) SHELF.settings={homeTz:"Asia/Kolkata",homeCur:"₹"}; saveShelf();
+        if(data.shared){ SHARED=data.shared; saveShared(); }
+        loadShelf(); // re-reads saved state and validates shapes
         Object.keys(data.trips||{}).forEach(id=>localStorage.setItem(TRIP_PREFIX+id,JSON.stringify(data.trips[id])));
+        for(const im of (data.images||[])) await DB.put(im.id,im.dataUrl);
         T=null; view="shelf"; render(); toast("Backup restored ✓");
       } else throw new Error("bad kind");
     }catch(e){ toast("⚠️ Invalid backup file"); }
@@ -785,6 +1575,7 @@ function importAll(input){
 function deleteTrip(){
   if(!confirm("Delete \""+T.name+"\" and everything in it?")) return;
   if(!confirm("Really? This cannot be undone. Export it first if unsure.")) return;
+  T.tripItems.forEach(it=>(it.attachments||[]).forEach(a=>DB.del(a.id)));
   localStorage.removeItem(TRIP_PREFIX+T.id);
   SHELF.trips=SHELF.trips.filter(x=>x.id!==T.id);
   saveShelf(); T=null; view="shelf"; render(); toast("Trip deleted");
@@ -805,12 +1596,16 @@ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().cat
 window.addEventListener("pagehide",()=>{ saveTripNow(); });
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") saveTripNow(); });
 
-/* Android back: modal → Today tab → shelf → exit (guard-entry pattern) */
+setInterval(updateClocks,10000);
+
+/* Android back: fullscreen → modal → More-subview → Today tab → shelf → exit */
 if(!(history.state&&history.state.g)) history.pushState({g:1},"");
 window.addEventListener("popstate",()=>{
-  if($("#modal-root").innerHTML){ dismissModal(); history.pushState({g:1},""); }
+  if($("#fs-root").innerHTML){ closeFs(); history.pushState({g:1},""); }
+  else if($("#modal-root").innerHTML){ dismissModal(); history.pushState({g:1},""); }
+  else if(view==="trip"&&tripTab==="more"&&moreSub){ moreSub=null; rerender(); history.pushState({g:1},""); }
   else if(view==="trip"&&tripTab!=="today"){ goTab("today"); history.pushState({g:1},""); }
-  else if(view==="trip"){ exitToShelf(); history.pushState({g:1},""); }
+  else if(view==="trip"||view==="wallet"){ if(view==="trip") exitToShelf(); else { view="shelf"; render(); } history.pushState({g:1},""); }
   else history.back();
 });
 

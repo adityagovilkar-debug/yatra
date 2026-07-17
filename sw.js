@@ -2,7 +2,7 @@
    Navigations are network-first (deployed updates reach installed
    phones) with cache fallback for offline. Static assets cache-first.
    Bump CACHE on breaking changes. */
-const CACHE = "yatra-v1";
+const CACHE = "yatra-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.svg", "./icon-512.svg", "./icon-maskable.svg"];
 
 self.addEventListener("install", e => {
