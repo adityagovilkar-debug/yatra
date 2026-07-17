@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#9a4a1c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Yātrā</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.svg">
+<style>
+:root{
+  --bg:#faf6f2; --card:#ffffff; --ink:#2d1f15; --muted:#7a6a5c;
+  --accent:#9a4a1c; --accent-soft:#f6e8dd; --accent-ink:#6e3413;
+  --line:#eadfd5; --warn:#b23b3b; --warn-soft:#fbeaea;
+  --good:#2f7d5b; --gold:#8a6d1f; --shadow:0 1px 3px rgba(60,30,10,.08),0 4px 12px rgba(60,30,10,.04);
+  --radius:16px; --tap:46px;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--ink); font-size:16px; line-height:1.45;
+  overscroll-behavior-y:none; -webkit-font-smoothing:antialiased;
+  padding-bottom:calc(70px + env(safe-area-inset-bottom));
+}
+h1,h2,h3{margin:0 0 .3em;} h2{font-size:1.25rem;} h3{font-size:1.02rem;}
+p{margin:.3em 0;}
+button{font-family:inherit; font-size:1rem; cursor:pointer; border:none; background:none; color:inherit;}
+input,textarea,select{font-family:inherit; font-size:16px; width:100%; padding:12px; border:1.5px solid var(--line);
+  border-radius:12px; background:#fff; color:var(--ink); min-height:var(--tap);}
+textarea{min-height:90px; resize:vertical; line-height:1.5;}
+label{display:block; font-size:.82rem; font-weight:600; color:var(--muted); margin:10px 0 4px;}
+input:focus,textarea:focus,select:focus{outline:none; border-color:var(--accent);}
+
+/* app header */
+.apphdr{position:sticky; top:0; z-index:40; background:var(--accent); color:#fff;
+  padding:calc(env(safe-area-inset-top) + 10px) 14px 10px; display:flex; align-items:center; gap:10px;}
+.apphdr .title{font-weight:800; letter-spacing:.3px; font-size:1.05rem; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.apphdr .backchip{background:rgba(255,255,255,.18); border-radius:999px; padding:6px 12px; font-size:.85rem; font-weight:700; color:#fff;}
+.apphdr .statuschip{background:rgba(255,255,255,.22); border-radius:999px; padding:4px 10px; font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.5px;}
+
+#app{max-width:520px; margin:0 auto;}
+.screen{padding:14px 14px 20px; animation:fade .18s ease;}
+@keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+.screen-title{font-size:1.5rem; font-weight:800; letter-spacing:-.5px; margin:2px 0 12px;}
+
+.card{background:var(--card); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); margin-bottom:14px; border:1px solid var(--line);}
+.card.tap{cursor:pointer;}
+.muted{color:var(--muted);} .small{font-size:.82rem;} .tiny{font-size:.72rem;}
+.right{margin-left:auto;} .row{display:flex; align-items:center; gap:10px;}
+.wrap{flex-wrap:wrap;} .between{justify-content:space-between;}
+.pill{display:inline-block; padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:700;
+  background:var(--accent-soft); color:var(--accent-ink);}
+.pill.grey{background:#f0eae4; color:var(--muted);}
+.pill.good{background:#e2f2ea; color:var(--good);}
+.pill.warn{background:var(--warn-soft); color:var(--warn);}
+.pill.gold{background:#f6efd9; color:var(--gold);}
+.divider{height:1px; background:var(--line); margin:12px 0;}
+
+.btn{background:var(--accent); color:#fff; padding:0 18px; height:var(--tap); border-radius:12px;
+  font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:8px; min-width:var(--tap);}
+.btn:active{transform:scale(.97);}
+.btn.block{width:100%;}
+.btn.ghost{background:var(--accent-soft); color:var(--accent-ink);}
+.btn.grey{background:#f0eae4; color:var(--ink);}
+.btn.warn{background:var(--warn-soft); color:var(--warn);}
+.btn.sm{height:38px; padding:0 12px; font-size:.85rem; border-radius:10px;}
+.iconbtn{width:40px; height:40px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center;
+  background:var(--accent-soft); color:var(--accent-ink); font-size:1.1rem;}
+.quickgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;}
+.quickbtn{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 10px; text-align:center;
+  box-shadow:var(--shadow); font-weight:700; font-size:.92rem; min-height:var(--tap);}
+.quickbtn .qi{font-size:1.5rem; display:block; margin-bottom:4px;}
+
+.empty{text-align:center; color:var(--muted); padding:34px 16px;}
+.empty .ei{font-size:2.4rem; display:block; margin-bottom:8px; opacity:.6;}
+
+.kv{display:flex; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); align-items:flex-start;}
+.kv:last-child{border-bottom:none;}
+.kv .k{font-size:.72rem; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); width:96px; flex:none; padding-top:2px; font-weight:700;}
+.kv .v{flex:1; font-weight:600; word-break:break-word;}
+.editable{border:1.5px dashed transparent; border-radius:8px; padding:2px 6px; margin:-2px -6px; cursor:pointer;}
+.editable:active{background:var(--accent-soft);}
+.editable.empty-val{color:var(--muted); font-weight:400; border-color:var(--line);}
+
+.chk{display:flex; gap:10px; align-items:center; padding:11px; border-radius:12px; border:1px solid var(--line); margin-bottom:7px; background:#fff;}
+.chk.done{opacity:.55;} .chk.done .ct{text-decoration:line-through;}
+.chk .box{width:24px; height:24px; border-radius:6px; border:2px solid var(--accent); flex:none; display:flex; align-items:center; justify-content:center; color:#fff; font-size:.9rem;}
+.chk.done .box{background:var(--accent);} .chk .ct{flex:1;}
+
+.grouphdr{font-size:.8rem; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--accent); margin:16px 0 8px;}
+
+/* trip cards on shelf */
+.tripcard{display:flex; gap:12px; align-items:center;}
+.tripcard .te{font-size:2rem; width:52px; height:52px; border-radius:14px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; flex:none;}
+.tripcard .tb{flex:1; min-width:0;}
+.tripcard h3{margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+/* day planner */
+.daycard{margin-bottom:12px;}
+.dayhdr{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+.dayhdr .dn{font-weight:800; color:var(--accent);}
+.planitem{display:flex; gap:10px; align-items:flex-start; padding:10px; border-radius:12px; border:1px solid var(--line); margin-bottom:7px; background:#fff;}
+.planitem.done{background:var(--accent-soft); border-color:var(--accent-soft);}
+.planitem .box{width:24px; height:24px; border-radius:6px; border:2px solid var(--accent); flex:none; display:flex; align-items:center; justify-content:center; color:#fff; font-size:.85rem; margin-top:1px;}
+.planitem.done .box{background:var(--accent);}
+.planitem.done .pt{text-decoration:line-through; opacity:.6;}
+.planitem .pt{flex:1;}
+.planitem .ptime{font-weight:800; color:var(--accent-ink); font-size:.82rem;}
+
+.modal-back{position:fixed; inset:0; background:rgba(30,18,8,.5); z-index:100; display:flex; align-items:flex-end; justify-content:center;}
+.modal{background:var(--card); width:100%; max-width:520px; border-radius:20px 20px 0 0; max-height:92vh; overflow-y:auto;
+  padding:18px 16px calc(18px + env(safe-area-inset-bottom)); animation:slideup .22s ease;}
+@keyframes slideup{from{transform:translateY(100%);} to{transform:none;}}
+.modal-grab{width:40px; height:4px; background:var(--line); border-radius:2px; margin:0 auto 12px;}
+.modal-actions{display:flex; gap:10px; margin-top:18px;}
+.modal-actions .btn{flex:1;}
+
+.tabbar{position:fixed; bottom:0; left:0; right:0; z-index:50; background:var(--card); border-top:1px solid var(--line);
+  display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom)); max-width:520px; margin:0 auto;}
+.tab{flex:1; background:none; padding:5px 2px; text-align:center; color:var(--muted); border-radius:12px; line-height:1.1;}
+.tab .ti{font-size:1.35rem; display:block;}
+.tab .tl{font-size:.66rem; font-weight:700; margin-top:2px;}
+.tab.active{color:var(--accent);}
+
+.seg{display:flex; background:var(--accent-soft); border-radius:12px; padding:4px; margin-bottom:14px; gap:4px;}
+.seg button{flex:1; padding:9px 4px; border-radius:9px; font-weight:700; font-size:.82rem; color:var(--accent-ink);}
+.seg button.on{background:#fff; box-shadow:var(--shadow); color:var(--accent);}
+
+.note{background:var(--accent-soft); color:var(--accent-ink); padding:10px 12px; border-radius:12px; font-size:.85rem;}
+.badge-warn{background:var(--warn-soft); color:var(--warn); padding:10px 12px; border-radius:12px; font-size:.85rem; font-weight:600;}
+.storagebar{height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:6px 0;}
+.storagebar > div{height:100%; background:var(--accent);}
+.stat{display:flex; justify-content:space-between; padding:5px 0;}
+.stat .sv{font-weight:800;}
+.total-strip{display:flex; gap:10px;}
+.total-strip .tb{flex:1; background:var(--accent-soft); border-radius:12px; padding:12px; text-align:center;}
+.total-strip .tb .tv{font-size:1.25rem; font-weight:800; color:var(--accent-ink);}
+.total-strip .tb .tk{font-size:.7rem; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:700;}
+.bignum{font-size:2rem; font-weight:800; letter-spacing:-1px; color:var(--accent);}
+.mood{font-size:1.4rem;}
+.moodpick{display:flex; gap:6px; justify-content:space-between;}
+.moodpick button{flex:1; font-size:1.5rem; padding:8px 0; border-radius:10px; border:1.5px solid var(--line); background:#fff;}
+.moodpick button.on{border-color:var(--accent); background:var(--accent-soft);}
+.tmpl{display:flex; gap:10px; align-items:flex-start; padding:12px; border-radius:12px; border:1.5px solid var(--line); margin-bottom:8px; background:#fff; cursor:pointer;}
+.tmpl.on{border-color:var(--accent); background:var(--accent-soft);}
+.tmpl .te{font-size:1.6rem;}
+</style>
+</head>
+<body>
+
+<div class="apphdr" id="apphdr"><div class="title">Yātrā</div></div>
+<div id="app"></div>
+<nav class="tabbar" id="tabbar" style="display:none"></nav>
+<div id="modal-root"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Yātrā — one app for every journey. Phase 1: shelf + core modules.
+   Storage: yatra.shelf (index) + yatra.trip.<id> (per-trip blobs)
+   ============================================================ */
+const SHELF_KEY="yatra.shelf";
+const TRIP_PREFIX="yatra.trip.";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const todayISO=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+const dayMs=864e5;
+const dateAdd=(iso,n)=>{const d=new Date(iso+"T12:00");d.setDate(d.getDate()+n);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+const daysBetween=(a,b)=>Math.round((new Date(b+"T12:00")-new Date(a+"T12:00"))/dayMs);
+function prettyDate(d,withYear){ try{ return new Date(d+"T12:00").toLocaleDateString("en-GB",Object.assign({weekday:"short",day:"numeric",month:"short"},withYear?{year:"numeric"}:{})); }catch(e){ return d; } }
+
+/* ---------------- templates ---------------- */
+const CURRENCIES=[["₹","₹ Rupee (INR)"],["€","€ Euro"],["$","$ Dollar"],["£","£ Pound"],["¥","¥ Yen"],["AED","AED Dirham"]];
+const TEMPLATES={
+  business:{label:"Business",emoji:"💼",desc:"Bookings, per-diem budget, work lists",modules:{planner:true,journal:true,budget:true,lists:true},
+    lists:[["Packing",["Laptop + charger","Formal wear","ID card / badge","Power adapter","Medicines"]],["To do before leaving",["Set out-of-office","Print documents","Inform bank if abroad"]]]},
+  leisure:{label:"Tourism & relaxation",emoji:"🌍",desc:"Day plans, sights, budget, journal",modules:{planner:true,journal:true,budget:true,lists:true},
+    lists:[["Packing",["Clothes","Comfortable shoes","Chargers","Medicines","Sunscreen"]],["To buy / bring home",[]]]},
+  pilgrimage:{label:"Pilgrimage",emoji:"🛕",desc:"Darshan sequence, offerings, journal",modules:{planner:true,journal:true,budget:true,lists:true},
+    lists:[["Darshan sequence",[]],["Offerings & puja items",[]],["Packing",["Comfortable footwear","Shawl / traditional wear","Medicines"]]]},
+  tournament:{label:"Tournament",emoji:"🃏",desc:"Schedule, results log, budget",modules:{planner:true,journal:true,budget:true,lists:true},
+    lists:[["Matches & results",[]],["Packing",["Convention card","Stationery","Comfortable clothes"]]]},
+  local:{label:"Local getaway",emoji:"🏞️",desc:"Simple plan + budget, no frills",modules:{planner:true,journal:true,budget:true,lists:true},
+    lists:[["Packing",["Clothes","Chargers","Snacks for the road"]]]},
+  free:{label:"Free-form",emoji:"🪁",desc:"No itinerary — journal and budget only",modules:{planner:false,journal:true,budget:true,lists:false},lists:[]}
+};
+
+/* ---------------- shelf (index) ---------------- */
+let SHELF=null;
+function loadShelf(){
+  try{ const raw=localStorage.getItem(SHELF_KEY); if(raw){ SHELF=JSON.parse(raw); if(!Array.isArray(SHELF.trips)) SHELF.trips=[]; return; } }catch(e){}
+  SHELF={version:1,trips:[]};
+  saveShelf();
+}
+function saveShelf(){ try{ localStorage.setItem(SHELF_KEY,JSON.stringify(SHELF)); }catch(e){ toast("⚠️ Could not save"); } }
+
+/* ---------------- trip load/save ---------------- */
+let T=null;           // currently open trip
+let saveTimer=null;
+function saveTrip(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveTripNow,250); }
+function saveTripNow(){
+  clearTimeout(saveTimer);
+  if(!T) return;
+  try{ localStorage.setItem(TRIP_PREFIX+T.id,JSON.stringify(T)); }catch(e){ toast("⚠️ Could not save — storage may be full"); }
+  // refresh the shelf index entry + cached stats
+  const ix=SHELF.trips.find(x=>x.id===T.id);
+  if(ix){
+    ix.name=T.name; ix.dest=T.dest; ix.emoji=T.emoji; ix.start=T.start; ix.end=T.end; ix.currency=T.currency;
+    ix.stats={spend:tripSpend(),journal:T.journal.length,days:tripDays(T)};
+    saveShelf();
+  }
+}
+function loadTrip(id){
+  try{ const raw=localStorage.getItem(TRIP_PREFIX+id); if(raw) return JSON.parse(raw); }catch(e){}
+  return null;
+}
+function newTripObject(o){
+  const tpl=TEMPLATES[o.template]||TEMPLATES.leisure;
+  return {
+    schema:1, id:uid(), created:todayISO(),
+    name:o.name||"Trip", dest:o.dest||"", emoji:o.emoji||tpl.emoji, template:o.template,
+    start:o.start||"", end:o.end||"", currency:o.currency||"₹",
+    modules:Object.assign({},tpl.modules),
+    budget:{total:o.budgetTotal||"", perDiem:o.perDiem||""},
+    expenses:[], planItems:[], journal:[],
+    lists:tpl.lists.map(l=>({id:uid(),name:l[0],items:l[1].map(t=>({id:uid(),text:t,done:false}))}))
+  };
+}
+
+/* ---------------- lifecycle ---------------- */
+function tripStatus(t){
+  const td=todayISO();
+  if(!t.start||!t.end) return "planning";
+  if(td<t.start) return "upcoming";
+  if(td>t.end) return "past";
+  return "active";
+}
+const STATUS_LABEL={planning:"Planning",upcoming:"Upcoming",active:"On trip",past:"Past"};
+function tripDays(t){ if(!t.start||!t.end) return 0; const d=daysBetween(t.start,t.end)+1; return d>0?d:0; }
+function dayNumber(t){ if(tripStatus(t)!=="active") return 0; return daysBetween(t.start,todayISO())+1; }
+
+/* ---------------- toast + modal (ported) ---------------- */
+function toast(msg){
+  const t=document.createElement("div"); t.textContent=msg;
+  t.style.cssText="position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#2d1f15;color:#fff;padding:11px 18px;border-radius:999px;z-index:200;font-size:.9rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:90%;text-align:center;";
+  document.body.appendChild(t); setTimeout(()=>{ t.style.transition="opacity .3s"; t.style.opacity="0"; setTimeout(()=>t.remove(),300); },1900);
+}
+let modalDismiss=null;
+function closeModal(){ modalDismiss=null; $("#modal-root").innerHTML=""; }
+function dismissModal(){ if(typeof modalDismiss==="function") modalDismiss(); else closeModal(); }
+function openForm(title,fields,values,onSave,opts){
+  opts=opts||{}; values=Object.assign({},values||{});
+  const inputs=fields.map(f=>{
+    const v=values[f.key]!==undefined?values[f.key]:(f.default!==undefined?f.default:"");
+    let ctl;
+    if(f.type==="textarea") ctl=`<textarea id="f_${f.key}" placeholder="${esc(f.placeholder||"")}">${esc(v)}</textarea>`;
+    else if(f.type==="select"){
+      const opts2=f.options.map(o=>Array.isArray(o)?o:[o,o]);
+      ctl=`<select id="f_${f.key}">`+opts2.map(o=>`<option value="${esc(o[0])}"${String(v)===String(o[0])?" selected":""}>${esc(o[1])}</option>`).join("")+`</select>`;
+    }
+    else if(f.type==="checkbox") return `<label style="display:flex;gap:10px;align-items:center;font-size:1rem;color:var(--ink);text-transform:none;margin:6px 0;"><input type="checkbox" id="f_${f.key}" style="width:24px;height:24px;min-height:0;" ${v?"checked":""}> ${esc(f.label)}</label>`;
+    else ctl=`<input type="${f.type||"text"}" id="f_${f.key}" value="${esc(v)}" placeholder="${esc(f.placeholder||"")}" ${f.type==="number"?'inputmode="decimal"':''}>`;
+    return `<label for="f_${f.key}">${esc(f.label)}</label>${ctl}`;
+  }).join("");
+  const delBtn=opts.onDelete?`<button class="btn warn" id="mDelete">Delete</button>`:"";
+  $("#modal-root").innerHTML=`<div class="modal-back"><div class="modal"><div class="modal-grab"></div>
+    <h2>${esc(title)}</h2>${inputs}
+    <div class="modal-actions">${delBtn}<button class="btn grey" id="mCancel">Cancel</button><button class="btn" id="mSave">Save</button></div></div></div>`;
+  const back=$("#modal-root .modal-back");
+  const snapshot=()=>fields.map(f=>{ const el=$("#f_"+f.key); return el?String(f.type==="checkbox"?el.checked:el.value):""; }).join("");
+  const initial=snapshot();
+  const tryDismiss=()=>{ if(snapshot()===initial||confirm("Discard changes?")) closeModal(); };
+  modalDismiss=tryDismiss;
+  back.addEventListener("click",e=>{ if(e.target===back) tryDismiss(); });
+  $("#mCancel").onclick=closeModal;
+  if(opts.onDelete) $("#mDelete").onclick=()=>{ if(confirm("Delete this?")){ opts.onDelete(); closeModal(); } };
+  $("#mSave").onclick=()=>{
+    const out={};
+    fields.forEach(f=>{ const el=$("#f_"+f.key); if(!el) return; out[f.key]=f.type==="checkbox"?el.checked:(f.type==="number"?(el.value===""?"":parseFloat(el.value)):el.value); });
+    closeModal(); onSave(out);
+  };
+}
+function editField(title,cur,cb,type){ openForm(title,[{key:"v",label:title,type:type||"text",default:cur}],{v:cur},o=>cb(o.v)); }
+
+/* ============================================================
+   Navigation: shelf <-> trip(tabs)
+   ============================================================ */
+let view="shelf";       // 'shelf' | 'trip'
+let tripTab="today";
+function tripTabs(){
+  const tabs=[["today","🏠","Today"]];
+  if(T.modules.planner) tabs.push(["plan","🗓️","Plan"]);
+  if(T.modules.budget) tabs.push(["money","💰","Money"]);
+  if(T.modules.lists) tabs.push(["lists","✅","Lists"]);
+  if(T.modules.journal) tabs.push(["journal","📓","Journal"]);
+  tabs.push(["more","⋯","More"]);
+  return tabs;
+}
+function renderHeader(){
+  const h=$("#apphdr");
+  if(view==="shelf"){ h.innerHTML=`<div class="title">🧳 Yātrā</div>`; return; }
+  const st=tripStatus(T);
+  h.innerHTML=`<button class="backchip" onclick="exitToShelf()">‹ Trips</button>
+    <div class="title">${esc(T.emoji)} ${esc(T.name)}</div>
+    <span class="statuschip">${STATUS_LABEL[st]}</span>`;
+}
+function renderTabbar(){
+  const bar=$("#tabbar");
+  if(view!=="trip"){ bar.style.display="none"; return; }
+  bar.style.display="flex";
+  bar.innerHTML=tripTabs().map(t=>`<button class="tab ${tripTab===t[0]?'active':''}" onclick="goTab('${t[0]}')"><span class="ti">${t[1]}</span><span class="tl">${t[2]}</span></button>`).join("");
+}
+function goTab(tab){ tripTab=tab; render(); window.scrollTo(0,0); }
+function render(){
+  renderHeader(); renderTabbar();
+  const el=$("#app");
+  if(view==="shelf"){ el.innerHTML=`<div class="screen">${shelfView()}</div>`; return; }
+  const fn={today:todayView,plan:planView,money:moneyView,lists:listsView,journal:journalView,more:moreView}[tripTab]||todayView;
+  el.innerHTML=`<div class="screen">${fn()}</div>`;
+}
+function rerender(){ render(); } // no scroll reset
+function enterTrip(id){
+  const t=loadTrip(id);
+  if(!t){ toast("⚠️ Trip data missing"); return; }
+  T=t; view="trip"; tripTab="today"; render(); window.scrollTo(0,0);
+}
+function exitToShelf(){ saveTripNow(); T=null; view="shelf"; render(); window.scrollTo(0,0); }
+
+/* ============================================================
+   SHELF
+   ============================================================ */
+function shelfView(){
+  const trips=SHELF.trips.map(ix=>({ix,st:tripStatus(ix)}));
+  const active=trips.filter(x=>x.st==="active");
+  const upcoming=trips.filter(x=>x.st==="upcoming").sort((a,b)=>a.ix.start.localeCompare(b.ix.start));
+  const planning=trips.filter(x=>x.st==="planning");
+  const past=trips.filter(x=>x.st==="past").sort((a,b)=>b.ix.end.localeCompare(a.ix.end));
+  let html=`<div class="screen-title">Your journeys</div>
+    <button class="btn block" onclick="openNewTrip()" style="margin-bottom:16px">➕ New trip</button>`;
+  if(!trips.length){
+    html+=`<div class="empty"><span class="ei">🧳</span>No trips yet.<br>Plan your first yātrā — business, pilgrimage,<br>tournament or just getting away.</div>`;
+    return html;
+  }
+  const card=(x,extra)=>`<div class="card tap" onclick="enterTrip('${x.ix.id}')"><div class="tripcard">
+    <div class="te">${esc(x.ix.emoji||"🧳")}</div>
+    <div class="tb"><h3>${esc(x.ix.name)}</h3>
+      <div class="small muted">${esc(x.ix.dest||"")}${x.ix.start?` · ${prettyDate(x.ix.start)}${x.ix.end?" – "+prettyDate(x.ix.end):""}`:""}</div>
+      ${extra||""}</div>
+    <span class="muted">›</span></div></div>`;
+  if(active.length){
+    html+=`<div class="grouphdr">On trip now</div>`;
+    active.forEach(x=>{ const d=dayNumber(x.ix), n=tripDays(x.ix); html+=card(x,`<span class="pill good">Day ${d} of ${n}</span>`); });
+  }
+  if(upcoming.length){
+    html+=`<div class="grouphdr">Upcoming</div>`;
+    upcoming.forEach(x=>{ const d=daysBetween(todayISO(),x.ix.start); html+=card(x,`<span class="pill gold">in ${d} day${d===1?"":"s"}</span>`); });
+  }
+  if(planning.length){
+    html+=`<div class="grouphdr">Planning</div>`;
+    planning.forEach(x=>html+=card(x,`<span class="pill grey">no dates yet</span>`));
+  }
+  if(past.length){
+    html+=`<div class="grouphdr">Past journeys</div>`;
+    past.forEach(x=>{
+      const s=x.ix.stats||{};
+      html+=card(x,`<span class="pill grey">${s.days||tripDays(x.ix)} days${s.spend?` · ${esc(x.ix.currency||"₹")}${(+s.spend).toFixed(0)} spent`:""}${s.journal?` · ${s.journal} journal entr${s.journal===1?"y":"ies"}`:""}</span>`);
+    });
+  }
+  return html;
+}
+function openNewTrip(){
+  // template picker first — one tap sets everything up
+  let chosen="leisure";
+  const tplHtml=Object.keys(TEMPLATES).map(k=>{
+    const t=TEMPLATES[k];
+    return `<div class="tmpl ${k===chosen?'on':''}" data-k="${k}" onclick="pickTmpl('${k}')"><div class="te">${t.emoji}</div><div><b>${t.label}</b><div class="small muted">${t.desc}</div></div></div>`;
+  }).join("");
+  $("#modal-root").innerHTML=`<div class="modal-back"><div class="modal"><div class="modal-grab"></div>
+    <h2>New trip</h2>
+    <label>What kind of trip?</label>${tplHtml}
+    <label for="nt_name">Trip name</label><input id="nt_name" placeholder="e.g. Nashik pilgrimage">
+    <label for="nt_dest">Destination</label><input id="nt_dest" placeholder="e.g. Nashik">
+    <label for="nt_start">Start date (leave blank if still dreaming)</label><input id="nt_start" type="date">
+    <label for="nt_end">End date</label><input id="nt_end" type="date">
+    <label for="nt_cur">Currency</label><select id="nt_cur">${CURRENCIES.map(c=>`<option value="${c[0]}">${c[1]}</option>`).join("")}</select>
+    <div class="modal-actions"><button class="btn grey" onclick="closeModal()">Cancel</button><button class="btn" id="nt_create">Create</button></div>
+  </div></div>`;
+  modalDismiss=null;
+  $("#modal-root .modal-back").addEventListener("click",e=>{ if(e.target===e.currentTarget) closeModal(); });
+  window.pickTmpl=k=>{ chosen=k; document.querySelectorAll(".tmpl").forEach(el=>el.classList.toggle("on",el.dataset.k===k)); };
+  $("#nt_create").onclick=()=>{
+    const name=$("#nt_name").value.trim();
+    if(!name){ toast("Give the trip a name"); return; }
+    const t=newTripObject({template:chosen,name,dest:$("#nt_dest").value.trim(),start:$("#nt_start").value,end:$("#nt_end").value,currency:$("#nt_cur").value});
+    if(t.start&&t.end&&t.end<t.start){ toast("End date is before start date"); return; }
+    SHELF.trips.push({id:t.id,name:t.name,dest:t.dest,emoji:t.emoji,start:t.start,end:t.end,currency:t.currency,stats:{}});
+    saveShelf();
+    try{ localStorage.setItem(TRIP_PREFIX+t.id,JSON.stringify(t)); }catch(e){ toast("⚠️ Could not save"); return; }
+    closeModal(); enterTrip(t.id); toast("Trip created — शुभ यात्रा!");
+  };
+}
+
+/* ============================================================
+   TODAY
+   ============================================================ */
+function fmt(n){ return esc(T.currency||"₹")+(Number(n)||0).toFixed(2); }
+function todaySpendT(){ return T.expenses.filter(e=>e.date===todayISO()).reduce((a,e)=>a+(+e.amount||0),0); }
+function tripSpend(){ return T.expenses.reduce((a,e)=>a+(+e.amount||0),0); }
+function todayView(){
+  const st=tripStatus(T);
+  let html="";
+  if(st==="active"){
+    const d=dayNumber(T),n=tripDays(T);
+    html+=`<div style="margin-bottom:12px"><span class="pill gold">${esc(T.emoji)} Day ${d} of ${n}${T.dest?" · "+esc(T.dest):""}</span></div>`;
+    // today's plan
+    if(T.modules.planner){
+      const items=T.planItems.filter(p=>p.date===todayISO()).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99"));
+      html+=`<div class="card"><div class="row between"><h3>🗓️ Today's plan</h3><button class="btn ghost sm" onclick="openPlanItem(null,'${todayISO()}')">＋</button></div>`;
+      if(!items.length) html+=`<p class="muted small">Nothing planned — enjoy the day, or add something.</p>`;
+      else items.forEach(p=>html+=planItemHtml(p));
+      html+=`</div>`;
+    }
+    if(T.modules.budget) html+=budgetSnapshot();
+    const hasToday=T.journal.some(l=>l.date===todayISO());
+    if(T.modules.journal&&!hasToday) html+=`<div class="card tap" onclick="openLogEntry('${todayISO()}')"><h3>📝 Write today's journal</h3><p class="muted small">What did you do today? What surprised you?</p></div>`;
+  }
+  else if(st==="upcoming"){
+    const d=daysBetween(todayISO(),T.start);
+    html+=`<div class="card" style="text-align:center"><div class="tiny muted" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Departure in</div>
+      <div class="bignum">${d} day${d===1?"":"s"}</div>
+      <div class="small muted">${prettyDate(T.start,true)} → ${prettyDate(T.end,true)} · ${tripDays(T)} days</div></div>`;
+    if(T.modules.lists&&T.lists.length){
+      html+=`<div class="card"><h3>✅ Getting ready</h3>`;
+      T.lists.forEach(l=>{
+        const done=l.items.filter(i=>i.done).length;
+        html+=`<div class="stat"><span>${esc(l.name)}</span><span class="sv">${done}/${l.items.length}</span></div>
+          <div class="storagebar"><div style="width:${l.items.length?Math.round(done/l.items.length*100):0}%"></div></div>`;
+      });
+      html+=`</div>`;
+    }
+    if(T.modules.planner){
+      const n=T.planItems.length;
+      html+=`<div class="card tap" onclick="goTab('plan')"><h3>🗓️ Itinerary</h3><p class="muted small">${n?n+" thing"+(n===1?"":"s")+" planned so far.":"Nothing planned yet — sketch your days."}</p></div>`;
+    }
+  }
+  else if(st==="past"){
+    const ago=daysBetween(T.end,todayISO());
+    html+=`<div class="card" style="text-align:center"><div class="tiny muted" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Trip completed</div>
+      <div class="bignum">${tripDays(T)} days</div>
+      <div class="small muted">${prettyDate(T.start,true)} → ${prettyDate(T.end,true)} · ended ${ago} day${ago===1?"":"s"} ago</div></div>`;
+    html+=`<div class="total-strip" style="margin-bottom:14px">
+      <div class="tb"><div class="tv">${fmt(tripSpend())}</div><div class="tk">Total spent</div></div>
+      <div class="tb"><div class="tv">${T.journal.length}</div><div class="tk">Journal entries</div></div>
+    </div>`;
+    if(T.modules.journal&&T.journal.length) html+=`<div class="card tap" onclick="goTab('journal')"><h3>📓 Re-read the journal</h3><p class="muted small">Your ${T.journal.length} entries from this trip, newest first.</p></div>`;
+  }
+  else { // planning
+    html+=`<div class="card"><h3>🌱 Still planning</h3><p class="muted small">No dates yet. Set them in <b>More → Trip settings</b> whenever you're ready — everything else already works.</p></div>`;
+  }
+  // quick actions
+  const q=[];
+  if(T.modules.budget) q.push(`<button class="quickbtn" onclick="openExpense()"><span class="qi">💰</span>Log expense</button>`);
+  if(T.modules.journal) q.push(`<button class="quickbtn" onclick="openLogEntry('${todayISO()}')"><span class="qi">📝</span>Journal</button>`);
+  if(T.modules.planner) q.push(`<button class="quickbtn" onclick="goTab('plan')"><span class="qi">🗓️</span>Day plan</button>`);
+  if(T.modules.lists) q.push(`<button class="quickbtn" onclick="goTab('lists')"><span class="qi">✅</span>Lists</button>`);
+  if(q.length) html+=`<div class="quickgrid">${q.join("")}</div>`;
+  return html;
+}
+function budgetSnapshot(){
+  const pd=+T.budget.perDiem||0, total=+T.budget.total||0;
+  let html=`<div class="card tap" onclick="goTab('money')">`;
+  if(pd){
+    const spent=todaySpendT(), rem=pd-spent;
+    html+=`<div class="row between"><h3>💰 Today's budget</h3><span class="tiny muted">${fmt(pd)}/day</span></div>
+      <div class="storagebar"><div style="width:${Math.min(100,spent/(pd||1)*100)}%;background:${rem<0?'var(--warn)':'var(--accent)'}"></div></div>
+      <div class="stat"><span>${rem<0?"Over by":"Left today"}</span><span class="sv" style="color:${rem<0?'var(--warn)':'var(--good)'}">${fmt(Math.abs(rem))}</span></div>`;
+  } else if(total){
+    const spent=tripSpend(), rem=total-spent;
+    html+=`<div class="row between"><h3>💰 Trip budget</h3><span class="tiny muted">${fmt(total)}</span></div>
+      <div class="storagebar"><div style="width:${Math.min(100,spent/(total||1)*100)}%;background:${rem<0?'var(--warn)':'var(--accent)'}"></div></div>
+      <div class="stat"><span>${rem<0?"Over by":"Remaining"}</span><span class="sv" style="color:${rem<0?'var(--warn)':'var(--good)'}">${fmt(Math.abs(rem))}</span></div>`;
+  } else {
+    html+=`<h3>💰 Budget</h3><p class="muted small">No budget set — tap to add one in Money.</p>`;
+  }
+  return html+`</div>`;
+}
+
+/* ============================================================
+   PLAN (day planner)
+   ============================================================ */
+function planItemHtml(p){
+  return `<div class="planitem ${p.done?'done':''}">
+    <div class="box" onclick="togglePlan('${p.id}')">${p.done?'✓':''}</div>
+    <div class="pt" onclick="openPlanItem('${p.id}')">${p.time?`<span class="ptime">${esc(p.time)}</span> `:""}${esc(p.text)}${p.note?`<div class="tiny muted">${esc(p.note)}</div>`:""}</div>
+  </div>`;
+}
+function planView(){
+  if(!T.start||!T.end) return `<div class="empty"><span class="ei">🗓️</span>Set your trip dates first<br>(More → Trip settings), then plan each day.</div>`;
+  const n=tripDays(T);
+  let html="";
+  const orphans=T.planItems.filter(p=>p.date<T.start||p.date>T.end);
+  for(let i=0;i<n;i++){
+    const date=dateAdd(T.start,i);
+    const items=T.planItems.filter(p=>p.date===date).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99"));
+    const isToday=date===todayISO();
+    html+=`<div class="card daycard" ${isToday?'style="border-color:var(--accent)"':''}>
+      <div class="dayhdr"><span class="dn">Day ${i+1}</span><span class="small muted">${prettyDate(date)}</span>${isToday?'<span class="pill good">today</span>':''}
+        <button class="iconbtn right" style="width:34px;height:34px" onclick="openPlanItem(null,'${date}')">＋</button></div>
+      ${items.map(planItemHtml).join("")||'<p class="muted small" style="margin:0">Free day.</p>'}
+    </div>`;
+  }
+  if(orphans.length){
+    html+=`<div class="grouphdr">Outside current dates</div><div class="card">`+orphans.map(planItemHtml).join("")+`</div>`;
+  }
+  html+=`<button class="btn ghost block" onclick="extendTrip()">＋ Add a day (extend trip)</button>`;
+  return html;
+}
+function openPlanItem(id,date){
+  const p=id?T.planItems.find(x=>x.id===id):null;
+  openForm(p?"Edit plan item":"Add to the plan",[
+    {key:"text",label:"What",placeholder:"Sunrise at the fort"},
+    {key:"date",label:"Day",type:"date",default:date||todayISO()},
+    {key:"time",label:"Time (optional)",type:"time"},
+    {key:"note",label:"Note (optional)",type:"textarea"}
+  ],p||{date:date||todayISO()},o=>{
+    if(!o.text){ return; }
+    if(p) Object.assign(p,o); else { o.id=uid(); o.done=false; T.planItems.push(o); }
+    saveTrip(); rerender();
+  },p?{onDelete:()=>{ T.planItems=T.planItems.filter(x=>x.id!==id); saveTrip(); rerender(); }}:null);
+}
+function togglePlan(id){ const p=T.planItems.find(x=>x.id===id); if(p){ p.done=!p.done; saveTrip(); rerender(); } }
+function extendTrip(){
+  if(!T.end) return;
+  T.end=dateAdd(T.end,1); saveTrip(); rerender();
+  toast("Trip extended to "+prettyDate(T.end,true));
+}
+
+/* ============================================================
+   MONEY (single-currency budget, phase 1)
+   ============================================================ */
+const CATS=["Food","Transport","Stay","Shopping","Sightseeing","Other"];
+function moneyView(){
+  const pd=+T.budget.perDiem||0, total=+T.budget.total||0;
+  let html=`<div class="card">
+    <h3>Budget</h3>
+    <div class="kv"><div class="k">Trip budget</div><div class="v editable ${total?'':'empty-val'}" onclick="editBudget('total')">${total?fmt(total):"Tap to set"}</div></div>
+    <div class="kv"><div class="k">Per diem</div><div class="v editable ${pd?'':'empty-val'}" onclick="editBudget('perDiem')">${pd?fmt(pd)+" / day":"Tap to set"}</div></div>
+    ${total?`<div class="stat" style="margin-top:6px"><span>Spent so far</span><span class="sv">${fmt(tripSpend())}</span></div>
+    <div class="storagebar"><div style="width:${Math.min(100,tripSpend()/(total||1)*100)}%;background:${tripSpend()>total?'var(--warn)':'var(--accent)'}"></div></div>
+    <div class="stat"><span>${tripSpend()>total?"Over budget by":"Remaining"}</span><span class="sv" style="color:${tripSpend()>total?'var(--warn)':'var(--good)'}">${fmt(Math.abs(total-tripSpend()))}</span></div>`:""}
+  </div>`;
+  if(pd){
+    const spent=todaySpendT(), rem=pd-spent;
+    html+=`<div class="card"><div class="row between"><h3>Today</h3><span class="tiny muted">${todayISO()}</span></div>
+      <div class="stat"><span>Spent today</span><span class="sv">${fmt(spent)}</span></div>
+      <div class="storagebar"><div style="width:${Math.min(100,spent/(pd||1)*100)}%;background:${rem<0?'var(--warn)':'var(--accent)'}"></div></div>
+      <div class="stat"><span>${rem<0?"Over by":"Left today"}</span><span class="sv" style="color:${rem<0?'var(--warn)':'var(--good)'}">${fmt(Math.abs(rem))}</span></div></div>`;
+  }
+  const cats={}; T.expenses.forEach(e=>{ const c=e.category||"Other"; cats[c]=(cats[c]||0)+(+e.amount||0); });
+  const catKeys=Object.keys(cats).sort((a,b)=>cats[b]-cats[a]);
+  if(catKeys.length){
+    const mx=cats[catKeys[0]]||1;
+    html+=`<div class="card"><h3>By category</h3>`+
+      catKeys.map(c=>`<div class="stat"><span>${esc(c)}</span><span class="sv">${fmt(cats[c])}</span></div><div class="storagebar"><div style="width:${Math.round(cats[c]/mx*100)}%"></div></div>`).join("")+`</div>`;
+  }
+  html+=`<button class="btn block" style="margin:4px 0 8px" onclick="openExpense()">➕ Log an expense</button>`;
+  if(T.expenses.length) html+=`<button class="btn ghost block" style="margin-bottom:14px" onclick="exportCsv()">⬇️ Export expenses (CSV)</button>`;
+  const exps=[...T.expenses].sort((a,b)=>(b.date+b.id).localeCompare(a.date+a.id));
+  if(!exps.length) html+=`<div class="empty"><span class="ei">🧾</span>No expenses yet.</div>`;
+  else{
+    let curDate="";
+    exps.forEach(e=>{
+      if(e.date!==curDate){ curDate=e.date; const dsum=T.expenses.filter(x=>x.date===e.date).reduce((a,x)=>a+(+x.amount||0),0); html+=`<div class="grouphdr" style="color:var(--muted);margin-bottom:6px">${esc(e.date)} · ${fmt(dsum)}</div>`; }
+      html+=`<div class="card tap" style="padding:12px" onclick="openExpense('${e.id}')"><div class="row between"><div><b>${fmt(e.amount)}</b> <span class="pill grey">${esc(e.category)}</span><div class="small muted">${esc(e.note||"")}</div></div></div></div>`;
+    });
+  }
+  return html;
+}
+function editBudget(key){
+  editField(key==="total"?"Trip budget ("+T.currency+")":"Per diem ("+T.currency+"/day)",T.budget[key]||"",v=>{ T.budget[key]=v===""?"":+v; saveTrip(); rerender(); },"number");
+}
+function openExpense(id){
+  const e=id?T.expenses.find(x=>x.id===id):null;
+  openForm(e?"Edit expense":"Log expense",[
+    {key:"amount",label:"Amount ("+T.currency+")",type:"number"},
+    {key:"category",label:"Category",type:"select",options:CATS,default:"Food"},
+    {key:"note",label:"Note"},
+    {key:"date",label:"Date",type:"date",default:todayISO()}
+  ],e||{date:todayISO(),category:"Food"},o=>{
+    if(o.amount===""||isNaN(o.amount)) return;
+    if(e) Object.assign(e,o); else { o.id=uid(); T.expenses.push(o); }
+    saveTrip(); rerender();
+  },e?{onDelete:()=>{ T.expenses=T.expenses.filter(x=>x.id!==id); saveTrip(); rerender(); }}:null);
+}
+function exportCsv(){
+  const q=v=>{ v=String(v==null?"":v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const rows=[["Date","Category","Note","Amount ("+T.currency+")"]];
+  [...T.expenses].sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+    .forEach(e=>rows.push([e.date,e.category,e.note||"",(+e.amount||0).toFixed(2)]));
+  rows.push(["","","Total",tripSpend().toFixed(2)]);
+  const csv=rows.map(r=>r.map(q).join(",")).join("\r\n");
+  const blob=new Blob(["﻿"+csv],{type:"text/csv"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=(T.name||"trip").replace(/\W+/g,"-").toLowerCase()+"-expenses.csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast("CSV downloaded");
+}
+
+/* ============================================================
+   LISTS
+   ============================================================ */
+function listsView(){
+  let html="";
+  if(!T.lists.length) html+=`<div class="empty"><span class="ei">✅</span>No lists yet.</div>`;
+  T.lists.forEach(l=>{
+    const done=l.items.filter(i=>i.done).length;
+    html+=`<div class="card">
+      <div class="row between"><h3>${esc(l.name)}</h3><span class="row" style="gap:6px"><span class="pill grey">${done}/${l.items.length}</span><button class="iconbtn" style="width:34px;height:34px" onclick="editList('${l.id}')">✎</button></span></div>
+      ${l.items.map(i=>`<div class="chk ${i.done?'done':''}"><div class="box" onclick="toggleItem('${l.id}','${i.id}')">${i.done?'✓':''}</div><div class="ct" onclick="editItem('${l.id}','${i.id}')">${esc(i.text)}</div></div>`).join("")}
+      <div class="row" style="gap:8px;margin-top:6px">
+        <button class="btn ghost sm" onclick="addItem('${l.id}')">➕ Add item</button>
+        ${done?`<button class="btn grey sm" onclick="resetList('${l.id}')">↺ Un-tick all</button>`:""}
+      </div>
+    </div>`;
+  });
+  html+=`<button class="btn ghost block" onclick="addList()">➕ New list</button>`;
+  return html;
+}
+function addList(){ editField("List name","",v=>{ if(v){ T.lists.push({id:uid(),name:v,items:[]}); saveTrip(); rerender(); } }); }
+function editList(id){
+  const l=T.lists.find(x=>x.id===id);
+  openForm("Edit list",[{key:"name",label:"List name",default:l.name}],l,o=>{ if(o.name) l.name=o.name; saveTrip(); rerender(); },
+    {onDelete:()=>{ T.lists=T.lists.filter(x=>x.id!==id); saveTrip(); rerender(); }});
+}
+function addItem(lid){ const l=T.lists.find(x=>x.id===lid); editField("Add to "+l.name,"",v=>{ if(v){ l.items.push({id:uid(),text:v,done:false}); saveTrip(); rerender(); } }); }
+function editItem(lid,iid){
+  const l=T.lists.find(x=>x.id===lid); const i=l.items.find(x=>x.id===iid);
+  editField("Edit item",i.text,v=>{ if(v) i.text=v; else l.items=l.items.filter(x=>x.id!==iid); saveTrip(); rerender(); });
+}
+function toggleItem(lid,iid){ const l=T.lists.find(x=>x.id===lid); const i=l.items.find(x=>x.id===iid); i.done=!i.done; saveTrip(); rerender(); }
+function resetList(lid){ const l=T.lists.find(x=>x.id===lid); l.items.forEach(i=>i.done=false); saveTrip(); rerender(); }
+
+/* ============================================================
+   JOURNAL (draft pattern — empty entries never persist)
+   ============================================================ */
+function journalView(){
+  let html=`<button class="btn block" onclick="openLogEntry('${todayISO()}')" style="margin-bottom:6px">📝 Today's entry</button>
+    <button class="btn ghost block" onclick="addPastLog()" style="margin-bottom:14px">＋ Entry for another date</button>`;
+  const logs=[...T.journal].sort((a,b)=>b.date.localeCompare(a.date));
+  if(!logs.length) html+=`<div class="empty"><span class="ei">📖</span>The journal is empty.<br>Capture a moment from the trip.</div>`;
+  else logs.forEach(l=>{
+    html+=`<div class="card tap" onclick="openLogEntry('${l.date}')">
+      <div class="row between"><h3>${esc(prettyDate(l.date,true))}</h3><span class="mood">${l.mood||""}</span></div>
+      <div class="small" style="white-space:pre-wrap">${esc((l.text||"").slice(0,220))}${(l.text||"").length>220?"…":""}</div>
+    </div>`;
+  });
+  return html;
+}
+let logDraft=null;
+function openLogEntry(date){
+  const existing=T.journal.find(x=>x.date===date);
+  logDraft=existing?null:{id:uid(),date,text:"",mood:""};
+  const l=existing||logDraft;
+  const moods=["😀","🙂","😐","😕","😴"];
+  $("#modal-root").innerHTML=`<div class="modal-back"><div class="modal"><div class="modal-grab"></div>
+    <h2>${esc(prettyDate(date,true))}</h2>
+    <label>How did the day feel?</label>
+    <div class="moodpick" id="moodPick">${moods.map(m=>`<button class="${l.mood===m?'on':''}" onclick="pickMood('${date}','${m}')">${m}</button>`).join("")}</div>
+    <label>What did you do today? What surprised you?</label>
+    <textarea id="logText" style="min-height:160px" placeholder="Write freely…">${esc(l.text)}</textarea>
+    <div class="modal-actions"><button class="btn warn" onclick="deleteLog('${date}')">Delete</button><button class="btn" onclick="saveLog('${date}')">Save</button></div>
+  </div></div>`;
+  modalDismiss=()=>saveLog(date,true);
+  $("#modal-root .modal-back").addEventListener("click",e=>{ if(e.target===e.currentTarget) saveLog(date,true); });
+}
+function logFor(date){ return T.journal.find(x=>x.date===date)||logDraft; }
+function pickMood(date,m){ const l=logFor(date); if(!l) return; l.mood=(l.mood===m?"":m); if(l!==logDraft) saveTrip(); document.querySelectorAll("#moodPick button").forEach(b=>b.classList.toggle("on",b.textContent===l.mood)); }
+function saveLog(date,silent){
+  const l=logFor(date); const t=$("#logText");
+  if(l){
+    if(t) l.text=t.value;
+    const inList=T.journal.some(x=>x.date===date);
+    if(!inList&&((l.text||"").trim()||l.mood)) T.journal.push(l);
+    if(inList||(l.text||"").trim()||l.mood) saveTrip();
+  }
+  logDraft=null; closeModal(); rerender(); if(!silent) toast("Saved");
+}
+function deleteLog(date){ if(!confirm("Delete this entry?"))return; T.journal=T.journal.filter(x=>x.date!==date); logDraft=null; saveTrip(); closeModal(); rerender(); }
+function addPastLog(){ editField("Entry date","",v=>{ if(v) openLogEntry(v); },"date"); }
+
+/* ============================================================
+   MORE (settings, modules, export, danger)
+   ============================================================ */
+const MODULE_INFO=[["planner","🗓️ Day planner","Day-by-day itinerary"],["budget","💰 Budget & expenses","Spending, per diem, CSV"],["lists","✅ Lists","Packing, to-buy, to-do"],["journal","📓 Journal","Daily notes & moods"]];
+function moreView(){
+  const t=T;
+  let html=`<div class="card">
+    <h3>Trip settings</h3>
+    <div class="kv"><div class="k">Name</div><div class="v editable" onclick="editTripField('name','Trip name')">${esc(t.name)}</div></div>
+    <div class="kv"><div class="k">Emoji</div><div class="v editable" onclick="editTripField('emoji','Emoji')">${esc(t.emoji)}</div></div>
+    <div class="kv"><div class="k">Destination</div><div class="v editable ${t.dest?'':'empty-val'}" onclick="editTripField('dest','Destination')">${esc(t.dest||"Tap to set")}</div></div>
+    <div class="kv"><div class="k">Start</div><div class="v editable ${t.start?'':'empty-val'}" onclick="editTripField('start','Start date','date')">${esc(t.start||"Tap to set")}</div></div>
+    <div class="kv"><div class="k">End</div><div class="v editable ${t.end?'':'empty-val'}" onclick="editTripField('end','End date','date')">${esc(t.end||"Tap to set")}</div></div>
+    <div class="kv"><div class="k">Currency</div><div class="v editable" onclick="editCurrency()">${esc(t.currency)}</div></div>
+  </div>
+  <div class="note" style="margin-bottom:14px">To <b>extend the trip</b>, just change the end date — the day planner and budget follow automatically.</div>
+  <div class="card"><h3>Modules</h3><p class="tiny muted">Switch parts of the app on or off for this trip. Nothing is deleted when off — it just hides.</p>`;
+  MODULE_INFO.forEach(m=>{
+    html+=`<div class="chk ${t.modules[m[0]]?'':'done'}" style="opacity:1"><div class="box" style="${t.modules[m[0]]?'background:var(--accent)':''}" onclick="toggleModule('${m[0]}')">${t.modules[m[0]]?'✓':''}</div><div class="ct"><b>${m[1]}</b><div class="tiny muted">${m[2]}</div></div></div>`;
+  });
+  html+=`</div>
+  <div class="card"><h3>Backup</h3>
+    <button class="btn block" onclick="exportTrip()" style="margin:8px 0">⬇️ Export this trip</button>
+    <button class="btn ghost block" onclick="exportAll()" style="margin-bottom:8px">⬇️ Export everything</button>
+    <label class="btn ghost block" style="cursor:pointer">⬆️ Import backup<input type="file" accept="application/json,.json" style="display:none" onchange="importAll(this)"></label>
+  </div>
+  <div class="card"><h3 style="color:var(--warn)">Danger zone</h3>
+    <button class="btn warn block" onclick="deleteTrip()">🗑️ Delete this trip</button>
+  </div>
+  <p class="tiny muted" style="text-align:center;margin-top:14px">Yātrā · Phase 1 · all data on this device · works offline</p>`;
+  return html;
+}
+function editTripField(key,label,type){
+  editField(label,T[key]||"",v=>{
+    if(key==="end"&&T.start&&v&&v<T.start){ toast("End date is before start"); return; }
+    T[key]=v; saveTrip(); render();
+  },type);
+}
+function editCurrency(){
+  openForm("Currency",[{key:"c",label:"Currency symbol",type:"select",options:CURRENCIES,default:T.currency}],{c:T.currency},o=>{ T.currency=o.c; saveTrip(); rerender(); });
+}
+function toggleModule(m){
+  T.modules[m]=!T.modules[m];
+  if(tripTab===m&&!T.modules[m]) tripTab="today";
+  saveTrip(); render();
+}
+function download(name,text,mime){
+  const blob=new Blob([text],{type:mime||"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportTrip(){
+  saveTripNow();
+  download((T.name||"trip").replace(/\W+/g,"-").toLowerCase()+"-yatra.json",JSON.stringify({_app:"yatra",_kind:"trip",_version:1,trip:T}));
+  toast("Trip exported");
+}
+function exportAll(){
+  saveTripNow();
+  const trips={};
+  SHELF.trips.forEach(ix=>{ const t=loadTrip(ix.id); if(t) trips[ix.id]=t; });
+  download("yatra-backup-"+todayISO()+".json",JSON.stringify({_app:"yatra",_kind:"all",_version:1,shelf:SHELF,trips}));
+  toast("Backup exported");
+}
+function importAll(input){
+  const file=input.files[0]; if(!file) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const data=JSON.parse(fr.result);
+      if(data._app!=="yatra") throw new Error("not yatra");
+      if(data._kind==="trip"&&data.trip){
+        const t=data.trip;
+        if(SHELF.trips.some(x=>x.id===t.id)&&!confirm("A trip with this id exists — overwrite it?")){ input.value=""; return; }
+        localStorage.setItem(TRIP_PREFIX+t.id,JSON.stringify(t));
+        if(!SHELF.trips.some(x=>x.id===t.id)) SHELF.trips.push({id:t.id,name:t.name,dest:t.dest,emoji:t.emoji,start:t.start,end:t.end,currency:t.currency,stats:{}});
+        saveShelf(); toast("Trip imported"); exitToShelf();
+      } else if(data._kind==="all"&&data.shelf){
+        if(!confirm("Importing replaces ALL trips on this device. Continue?")){ input.value=""; return; }
+        // clear existing trip keys, then restore
+        SHELF.trips.forEach(ix=>localStorage.removeItem(TRIP_PREFIX+ix.id));
+        SHELF=data.shelf; saveShelf();
+        Object.keys(data.trips||{}).forEach(id=>localStorage.setItem(TRIP_PREFIX+id,JSON.stringify(data.trips[id])));
+        T=null; view="shelf"; render(); toast("Backup restored ✓");
+      } else throw new Error("bad kind");
+    }catch(e){ toast("⚠️ Invalid backup file"); }
+    input.value="";
+  };
+  fr.readAsText(file);
+}
+function deleteTrip(){
+  if(!confirm("Delete \""+T.name+"\" and everything in it?")) return;
+  if(!confirm("Really? This cannot be undone. Export it first if unsure.")) return;
+  localStorage.removeItem(TRIP_PREFIX+T.id);
+  SHELF.trips=SHELF.trips.filter(x=>x.id!==T.id);
+  saveShelf(); T=null; view="shelf"; render(); toast("Trip deleted");
+}
+
+/* ============================================================
+   Boot
+   ============================================================ */
+loadShelf();
+(function boot(){
+  const active=SHELF.trips.find(ix=>tripStatus(ix)==="active");
+  if(active){ enterTrip(active.id); } else { render(); }
+})();
+
+// persistent storage request (auto-granted for installed PWAs)
+if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+// flush saves when backgrounded
+window.addEventListener("pagehide",()=>{ saveTripNow(); });
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") saveTripNow(); });
+
+/* Android back: modal → Today tab → shelf → exit (guard-entry pattern) */
+if(!(history.state&&history.state.g)) history.pushState({g:1},"");
+window.addEventListener("popstate",()=>{
+  if($("#modal-root").innerHTML){ dismissModal(); history.pushState({g:1},""); }
+  else if(view==="trip"&&tripTab!=="today"){ goTab("today"); history.pushState({g:1},""); }
+  else if(view==="trip"){ exitToShelf(); history.pushState({g:1},""); }
+  else history.back();
+});
+
+// service worker (hosted only)
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  try{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){}
+}
+</script>
+</body>
+</html>
