@@ -293,17 +293,17 @@ async function fullscreenImage(id){
 /* ---------------- templates ---------------- */
 const CURRENCIES=[["₹","₹ Rupee (INR)"],["€","€ Euro"],["$","$ Dollar"],["£","£ Pound"],["¥","¥ Yen"],["AED","AED Dirham"]];
 const TEMPLATES={
-  business:{label:"Business",emoji:"💼",desc:"Bookings, per-diem budget, work lists",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
+  business:{label:"Business",emoji:"💼",desc:"Bookings, per-diem budget, work lists",modules:{planner:true,timeline:true,journal:true,budget:true,business:true,lists:true},
     lists:[["Packing",["Laptop + charger","Formal wear","ID card / badge","Power adapter","Medicines"]],["To do before leaving",["Set out-of-office","Print documents","Inform bank if abroad"]]]},
-  leisure:{label:"Tourism & relaxation",emoji:"🌍",desc:"Day plans, sights, budget, journal",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
+  leisure:{label:"Tourism & relaxation",emoji:"🌍",desc:"Day plans, sights, budget, journal",modules:{planner:true,timeline:true,journal:true,budget:true,business:false,lists:true},
     lists:[["Packing",["Clothes","Comfortable shoes","Chargers","Medicines","Sunscreen"]],["To buy / bring home",[]]]},
-  pilgrimage:{label:"Pilgrimage",emoji:"🛕",desc:"Darshan sequence, offerings, journal",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
+  pilgrimage:{label:"Pilgrimage",emoji:"🛕",desc:"Darshan sequence, offerings, journal",modules:{planner:true,timeline:true,journal:true,budget:true,business:false,lists:true},
     lists:[["Darshan sequence",[]],["Offerings & puja items",[]],["Packing",["Comfortable footwear","Shawl / traditional wear","Medicines"]]]},
-  tournament:{label:"Tournament",emoji:"🃏",desc:"Schedule, results log, budget",modules:{planner:true,timeline:true,journal:true,budget:true,lists:true},
+  tournament:{label:"Tournament",emoji:"🃏",desc:"Schedule, results log, budget",modules:{planner:true,timeline:true,journal:true,budget:true,business:false,lists:true},
     lists:[["Matches & results",[]],["Packing",["Convention card","Stationery","Comfortable clothes"]]]},
-  local:{label:"Local getaway",emoji:"🏞️",desc:"Simple plan + budget, no frills",modules:{planner:true,timeline:false,journal:true,budget:true,lists:true},
+  local:{label:"Local getaway",emoji:"🏞️",desc:"Simple plan + budget, no frills",modules:{planner:true,timeline:false,journal:true,budget:true,business:false,lists:true},
     lists:[["Packing",["Clothes","Chargers","Snacks for the road"]]]},
-  free:{label:"Free-form",emoji:"🪁",desc:"No itinerary — journal and budget only",modules:{planner:false,timeline:false,journal:true,budget:true,lists:false},lists:[]}
+  free:{label:"Free-form",emoji:"🪁",desc:"No itinerary — journal and budget only",modules:{planner:false,timeline:false,journal:true,budget:true,business:false,lists:false},lists:[]}
 };
 
 /* ---------------- shelf (index) + shared travel wallet ---------------- */
@@ -356,7 +356,7 @@ function loadTrip(id){
 function newTripObject(o){
   const tpl=TEMPLATES[o.template]||TEMPLATES.leisure;
   return mergeTrip({
-    schema:2, id:uid(), created:todayISO(),
+    schema:3, id:uid(), created:todayISO(),
     name:o.name||"Trip", dest:o.dest||"", emoji:o.emoji||tpl.emoji, template:o.template,
     start:o.start||"", end:o.end||"", currency:o.currency||"₹",
     destTz:o.destTz||"", language:o.language||"",
@@ -366,10 +366,12 @@ function newTripObject(o){
     lists:tpl.lists.map(l=>({id:uid(),name:l[0],items:l[1].map(t=>({id:uid(),text:t,done:false}))}))
   });
 }
-// upgrade Phase-1 trips (and fill any missing fields) on load
+function afterTemplate(t){ if(t.modules.business) seedWallets(t); return t; }
+// upgrade older trips (and fill any missing fields) on load
 function mergeTrip(t){
   if(!t.modules) t.modules={};
   if(t.modules.timeline===undefined){ const tpl=TEMPLATES[t.template]; t.modules.timeline=tpl?!!tpl.modules.timeline:true; }
+  if(t.modules.business===undefined){ const tpl=TEMPLATES[t.template]; t.modules.business=tpl?!!tpl.modules.business:false; }
   ["destTz","language"].forEach(k=>{ if(t[k]===undefined) t[k]=""; });
   if(t.rate===undefined) t.rate="";
   if(t.rateDate===undefined) t.rateDate="";
@@ -381,8 +383,16 @@ function mergeTrip(t){
     {id:uid(),label:"Local emergency number",value:""},
     {id:uid(),label:"Hotel name & phone",value:""}
   ]};
-  t.schema=2;
+  // business pack: wallets/topups/shared/settlements (seeded lazily on enable)
+  if(!Array.isArray(t.wallets)) t.wallets=[];
+  if(!Array.isArray(t.topups)) t.topups=[];
+  if(!Array.isArray(t.shared)) t.shared=[];
+  if(!Array.isArray(t.settlements)) t.settlements=[];
+  t.schema=3;
   return t;
+}
+function seedWallets(t){
+  if(!t.wallets.length) t.wallets=[{id:"w_cash",name:"My Cash",kind:"cash"},{id:"w_forex",name:"My Card",kind:"card"}];
 }
 
 /* ---------------- lifecycle ---------------- */
@@ -453,7 +463,7 @@ let tripTab="today";
 function tripTabs(){
   const tabs=[["today","🏠","Today"]];
   if(T.modules.planner||T.modules.timeline) tabs.push(["plan","🗓️",T.modules.planner?"Plan":"Trip"]);
-  if(T.modules.budget) tabs.push(["money","💰","Money"]);
+  if(T.modules.budget||T.modules.business) tabs.push(["money","💰","Money"]);
   if(T.modules.lists) tabs.push(["lists","✅","Lists"]);
   if(T.modules.journal) tabs.push(["journal","📓","Journal"]);
   tabs.push(["more","⋯","More"]);
@@ -629,7 +639,7 @@ function openNewTrip(){
   $("#nt_create").onclick=()=>{
     const name=$("#nt_name").value.trim();
     if(!name){ toast("Give the trip a name"); return; }
-    const t=newTripObject({template:chosen,name,dest:$("#nt_dest").value.trim(),start:$("#nt_start").value,end:$("#nt_end").value,currency:$("#nt_cur").value,destTz:$("#nt_tz").value,language:$("#nt_lang").value.trim()});
+    const t=afterTemplate(newTripObject({template:chosen,name,dest:$("#nt_dest").value.trim(),start:$("#nt_start").value,end:$("#nt_end").value,currency:$("#nt_cur").value,destTz:$("#nt_tz").value,language:$("#nt_lang").value.trim()}));
     if(t.start&&t.end&&t.end<t.start){ toast("End date is before start date"); return; }
     SHELF.trips.push({id:t.id,name:t.name,dest:t.dest,emoji:t.emoji,start:t.start,end:t.end,currency:t.currency,stats:{}});
     saveShelf();
@@ -642,7 +652,8 @@ function openNewTrip(){
    TODAY
    ============================================================ */
 function fmt(n){ return esc(T.currency||"₹")+(Number(n)||0).toFixed(2); }
-function todaySpendT(){ return T.expenses.filter(e=>e.date===todayISO()).reduce((a,e)=>a+(+e.amount||0),0); }
+// per-diem tracks company spending on business trips; all spending otherwise
+function todaySpendT(){ return T.expenses.filter(e=>e.date===todayISO()&&(!T.modules.business||fundMatch(e.fund,"company"))).reduce((a,e)=>a+(+e.amount||0),0); }
 function tripSpend(){ return T.expenses.reduce((a,e)=>a+(+e.amount||0),0); }
 function companionChips(){
   const comps=T.companions.map(id=>personById(id)).filter(Boolean).map(p=>p.name);
@@ -1087,14 +1098,55 @@ function resetSteps(id){ const c=T.airportCards.find(x=>x.id===id); c.steps.forE
 const CATS=["Food","Transport","Stay","Shopping","Sightseeing","Other"];
 const isForeign=()=>T.currency!==homeCur();
 function inHome(n){ return (+T.rate&&isForeign())?` <span class="tiny muted">≈ ${esc(homeCur())}${Math.round((Number(n)||0)*T.rate).toLocaleString("en-IN")}</span>`:""; }
+
+/* ---- business pack: wallets (where) x funds (whose: company/personal) + companion split ---- */
+const bizOn=()=>!!T.modules.business;
+const FUND_OPTS=[["company","🏢 Company"],["personal","🙂 Personal"]];
+const walletOpts=()=>T.wallets.map(w=>[w.id,w.name]);
+function walletById(id){ return T.wallets.find(w=>w.id===id)||{name:"?"}; }
+function fundMatch(f,filter){ return !filter||(f||"company")===filter; } // legacy/undefined fund = company
+function walletBalance(wid,fund){
+  let b=0;
+  T.topups.forEach(t=>{ if(t.walletId===wid&&fundMatch(t.fund,fund)) b+=(+t.amount||0); });
+  T.expenses.forEach(e=>{ if(e.walletId===wid&&fundMatch(e.fund,fund)) b-=(+e.amount||0); });
+  T.shared.forEach(s=>{ if(s.payerId==="me"&&s.payerWalletId===wid&&fundMatch(s.fund,fund)) b-=(+s.total||0); });
+  T.settlements.forEach(st=>{ if(st.walletId===wid&&fundMatch(st.fund,fund)) b += (st.dir==="fromThem"?(+st.amount||0):-(+st.amount||0)); });
+  return b;
+}
+function myPart(s){ const p=(s.parts||[]).find(x=>x.who==="me"); return p?(+p.amount||0):0; }
+function partFor(s,pid){ const p=(s.parts||[]).find(x=>x.who===pid); return p?(+p.amount||0):0; }
+// net position with one companion; positive = you owe them
+function netOwedPerson(pid,fund){
+  let n=0;
+  T.shared.forEach(s=>{ if(!fundMatch(s.fund,fund)) return;
+    if(s.payerId===pid) n+=myPart(s);            // they paid → I owe my part
+    else if(s.payerId==="me") n-=partFor(s,pid); // I paid → they owe their part
+  });
+  T.settlements.forEach(st=>{ if(st.personId!==pid||!fundMatch(st.fund,fund)) return;
+    n += (st.dir==="toThem"? -(+st.amount||0) : (+st.amount||0));
+  });
+  return n;
+}
+function tripCompanions(){ return T.companions.map(id=>personById(id)).filter(Boolean); }
+function companyReceived(){ return T.topups.filter(t=>fundMatch(t.fund,"company")).reduce((a,t)=>a+(+t.amount||0),0); }
+function companyDirectSpent(){ return T.expenses.filter(e=>fundMatch(e.fund,"company")).reduce((a,e)=>a+(+e.amount||0),0); }
+function companySharedShares(){ return T.shared.filter(s=>fundMatch(s.fund,"company")).reduce((a,s)=>a+myPart(s),0); }
+function companySpent(){ return companyDirectSpent()+companySharedShares(); }
+function companyOnHand(){ return T.wallets.reduce((a,w)=>a+walletBalance(w.id,"company"),0); }
+function personalSpentT(){ return T.expenses.filter(e=>e.fund==="personal").reduce((a,e)=>a+(+e.amount||0),0); }
+function hasCompanyActivity(){ return companyReceived()>0||companySpent()>0; }
+
 let moneySeg="spend";
 function moneyView(){
-  if(!isForeign()) moneySeg="spend";
-  let html=isForeign()?`<div class="seg">
-    <button class="${moneySeg==='spend'?'on':''}" onclick="moneySeg='spend';rerender()">Spend</button>
-    <button class="${moneySeg==='convert'?'on':''}" onclick="moneySeg='convert';rerender()">Convert</button>
-  </div>`:"";
+  const biz=bizOn();
+  const segs=[["spend","Spend"]];
+  if(biz) segs.push(["wallets","Wallets"],["split","Split"]);
+  if(isForeign()) segs.push(["convert","Convert"]);
+  if(!segs.some(s=>s[0]===moneySeg)) moneySeg="spend";
+  let html=segs.length>1?`<div class="seg">${segs.map(s=>`<button class="${moneySeg===s[0]?'on':''}" onclick="moneySeg='${s[0]}';rerender()">${s[1]}</button>`).join("")}</div>`:"";
   if(moneySeg==="convert") return html+convertView();
+  if(moneySeg==="wallets") return html+walletsView();
+  if(moneySeg==="split") return html+splitView();
   return html+spendView();
 }
 function convertView(){
@@ -1136,16 +1188,20 @@ function spendView(){
   </div>`;
   if(pd){
     const spent=todaySpendT(), rem=pd-spent;
-    html+=`<div class="card"><div class="row between"><h3>Today</h3><span class="tiny muted">${todayISO()}</span></div>
+    html+=`<div class="card"><div class="row between"><h3>Today${bizOn()?" (company)":""}</h3><span class="tiny muted">${todayISO()}</span></div>
       <div class="stat"><span>Spent today</span><span class="sv">${fmt(spent)}</span></div>
       <div class="storagebar"><div style="width:${Math.min(100,spent/(pd||1)*100)}%;background:${rem<0?'var(--warn)':'var(--accent)'}"></div></div>
       <div class="stat"><span>${rem<0?"Over by":"Left today"}</span><span class="sv" style="color:${rem<0?'var(--warn)':'var(--good)'}">${fmt(Math.abs(rem))}</span></div></div>`;
   }
-  const cats={}; T.expenses.forEach(e=>{ const c=e.category||"Other"; cats[c]=(cats[c]||0)+(+e.amount||0); });
+  if(bizOn()) html+=`<div class="total-strip" style="margin-bottom:14px">
+    <div class="tb"><div class="tv">${fmt(companyDirectSpent())}</div><div class="tk">🏢 Company spent</div></div>
+    <div class="tb"><div class="tv">${fmt(personalSpentT())}</div><div class="tk">🙂 Personal spent</div></div>
+  </div>`;
+  const cats={}; T.expenses.filter(e=>!bizOn()||fundMatch(e.fund,"company")).forEach(e=>{ const c=e.category||"Other"; cats[c]=(cats[c]||0)+(+e.amount||0); });
   const catKeys=Object.keys(cats).sort((a,b)=>cats[b]-cats[a]);
   if(catKeys.length){
     const mx=cats[catKeys[0]]||1;
-    html+=`<div class="card"><h3>By category</h3>`+
+    html+=`<div class="card"><h3>${bizOn()?"Company spend by category":"By category"}</h3>`+
       catKeys.map(c=>`<div class="stat"><span>${esc(c)}</span><span class="sv">${fmt(cats[c])}</span></div><div class="storagebar"><div style="width:${Math.round(cats[c]/mx*100)}%"></div></div>`).join("")+`</div>`;
   }
   html+=`<button class="btn block" style="margin:4px 0 8px" onclick="openExpense()">➕ Log an expense</button>`;
@@ -1156,7 +1212,9 @@ function spendView(){
     let curDate="";
     exps.forEach(e=>{
       if(e.date!==curDate){ curDate=e.date; const dsum=T.expenses.filter(x=>x.date===e.date).reduce((a,x)=>a+(+x.amount||0),0); html+=`<div class="grouphdr" style="color:var(--muted);margin-bottom:6px">${esc(e.date)} · ${fmt(dsum)}</div>`; }
-      html+=`<div class="card tap" style="padding:12px" onclick="openExpense('${e.id}')"><div class="row between"><div><b>${fmt(e.amount)}</b> <span class="pill grey">${esc(e.category)}</span><div class="small muted">${esc(e.note||"")}</div></div></div></div>`;
+      const biz=bizOn(), personal=e.fund==="personal";
+      const meta=biz?`${esc(walletById(e.walletId).name)}${e.note?" · "+esc(e.note):""}`:esc(e.note||"");
+      html+=`<div class="card tap" style="padding:12px" onclick="openExpense('${e.id}')"><div class="row between"><div><b>${fmt(e.amount)}</b> <span class="pill grey">${esc(e.category)}</span>${biz?` <span class="pill ${personal?'gold':''}">${personal?'🙂':'🏢'}</span>`:""}<div class="small muted">${meta}</div></div></div></div>`;
     });
   }
   return html;
@@ -1166,12 +1224,18 @@ function editBudget(key){
 }
 function openExpense(id){
   const e=id?T.expenses.find(x=>x.id===id):null;
-  openForm(e?"Edit expense":"Log expense",[
+  const fields=[
     {key:"amount",label:"Amount ("+T.currency+")",type:"number"},
-    {key:"category",label:"Category",type:"select",options:CATS,default:"Food"},
-    {key:"note",label:"Note"},
-    {key:"date",label:"Date",type:"date",default:todayISO()}
-  ],e||{date:todayISO(),category:"Food"},o=>{
+    {key:"category",label:"Category",type:"select",options:CATS,default:"Food"}
+  ];
+  if(bizOn()) fields.push(
+    {key:"walletId",label:"Paid from",type:"select",options:walletOpts(),default:T.wallets[0].id},
+    {key:"fund",label:"Whose money",type:"select",options:FUND_OPTS,default:T.template==="business"?"company":"personal"}
+  );
+  fields.push({key:"note",label:"Note"},{key:"date",label:"Date",type:"date",default:todayISO()});
+  const init=e||{date:todayISO(),category:"Food"};
+  if(bizOn()&&!e){ init.walletId=T.wallets[0].id; init.fund=T.template==="business"?"company":"personal"; }
+  openForm(e?"Edit expense":"Log expense",fields,init,o=>{
     if(o.amount===""||isNaN(o.amount)) return;
     if(e) Object.assign(e,o); else { o.id=uid(); T.expenses.push(o); }
     saveTrip(); rerender();
@@ -1179,16 +1243,192 @@ function openExpense(id){
 }
 function exportCsv(){
   const q=v=>{ v=String(v==null?"":v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  const rows=[["Date","Category","Note","Amount ("+T.currency+")"]];
+  const biz=bizOn();
+  const rows=[biz?["Date","Category","Wallet","Fund","Note","Amount ("+T.currency+")"]:["Date","Category","Note","Amount ("+T.currency+")"]];
   [...T.expenses].sort((a,b)=>String(a.date).localeCompare(String(b.date)))
-    .forEach(e=>rows.push([e.date,e.category,e.note||"",(+e.amount||0).toFixed(2)]));
-  rows.push(["","","Total",tripSpend().toFixed(2)]);
+    .forEach(e=>rows.push(biz?[e.date,e.category,walletById(e.walletId).name,e.fund||"company",e.note||"",(+e.amount||0).toFixed(2)]:[e.date,e.category,e.note||"",(+e.amount||0).toFixed(2)]));
+  rows.push(biz?["","","","","Total",tripSpend().toFixed(2)]:["","","Total",tripSpend().toFixed(2)]);
   const csv=rows.map(r=>r.map(q).join(",")).join("\r\n");
   const blob=new Blob(["﻿"+csv],{type:"text/csv"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a"); a.href=url; a.download=(T.name||"trip").replace(/\W+/g,"-").toLowerCase()+"-expenses.csv"; a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   toast("CSV downloaded");
+}
+
+/* ---------------- Wallets sub-tab ---------------- */
+function walletsView(){
+  let html=`<p class="small muted" style="margin-top:-4px">Each wallet's real balance, split into company vs your personal money.</p>`;
+  T.wallets.forEach(w=>{
+    const real=walletBalance(w.id), comp=walletBalance(w.id,"company"), pers=walletBalance(w.id,"personal");
+    html+=`<div class="card" style="margin-bottom:12px">
+      <div class="row between"><h3>${w.kind==="cash"?"💵":"💳"} ${esc(w.name)}</h3><button class="iconbtn" onclick="openWallet('${w.id}')">✎</button></div>
+      <div class="bignum" style="font-size:1.6rem;margin:2px 0 8px;color:${real<0?'var(--warn)':'var(--accent)'}">${fmt(real)}</div>
+      <div class="row" style="gap:8px"><span class="pill">🏢 Company ${fmt(comp)}</span><span class="pill gold">🙂 Personal ${fmt(pers)}</span></div>
+    </div>`;
+  });
+  html+=`<div class="row" style="gap:8px;margin-bottom:14px"><button class="btn block" onclick="openTopup()">➕ Add money</button><button class="btn ghost sm" onclick="openWallet()">＋ Wallet</button></div>`;
+  if(T.topups.length){
+    html+=`<h3 style="margin:6px 0 8px">Money added</h3>`;
+    [...T.topups].sort((a,b)=>(b.date+b.id).localeCompare(a.date+a.id)).forEach(t=>{
+      html+=`<div class="card tap" style="padding:12px" onclick="openTopup('${t.id}')"><div class="row between"><div><b>+${fmt(t.amount)}</b> <span class="pill ${t.fund==='personal'?'gold':''}">${t.fund==='personal'?'🙂 Personal':'🏢 Company'}</span><div class="small muted">${esc(walletById(t.walletId).name)}${t.note?" · "+esc(t.note):""} · ${esc(t.date)}</div></div></div></div>`;
+    });
+  }
+  if(hasCompanyActivity()){
+    const rec=companyReceived(), spent=companySpent(), onHand=companyOnHand();
+    const owed=tripCompanions().reduce((a,p)=>a+netOwedPerson(p.id,"company"),0);
+    const settled=Math.abs(owed)<0.005;
+    html+=`<div class="card" style="margin-top:14px;border-color:var(--accent)"><h3>🧾 Company money audit</h3>
+      <div class="stat"><span>Received (company)</span><span class="sv">${fmt(rec)}</span></div>
+      <div class="stat"><span>Spent — per diem + your shares</span><span class="sv">${fmt(spent)}</span></div>
+      <div class="divider"></div>
+      <div class="stat"><span><b>On hand to return</b></span><span class="sv" style="color:${onHand<0?'var(--warn)':'var(--good)'}">${fmt(onHand)}</span></div>
+      ${settled?"":`<div class="badge-warn" style="margin-top:8px">⚠️ ${owed>0?"You still owe companions "+fmt(owed):"Companions owe you "+fmt(-owed)} — settle in Split before finalizing.</div>`}
+      <button class="btn ghost block" style="margin-top:12px" onclick="auditReport()">⬇️ Download audit report</button></div>`;
+  }
+  return html;
+}
+function openTopup(id){
+  const t=id?T.topups.find(x=>x.id===id):null;
+  openForm(t?"Edit money added":"Add money",[
+    {key:"amount",label:"Amount ("+T.currency+")",type:"number"},
+    {key:"walletId",label:"Into wallet",type:"select",options:walletOpts(),default:T.wallets[0].id},
+    {key:"fund",label:"Source",type:"select",options:[["company","🏢 Company allocation"],["personal","🙂 My personal money"]],default:"company"},
+    {key:"note",label:"Note",placeholder:"e.g. company cash allocation"},
+    {key:"date",label:"Date",type:"date",default:todayISO()}
+  ],t||{date:todayISO(),fund:"company",walletId:T.wallets[0].id},o=>{
+    if(o.amount===""||isNaN(o.amount)) return;
+    if(t) Object.assign(t,o); else { o.id=uid(); T.topups.push(o); }
+    saveTrip(); rerender(); toast("Saved");
+  },t?{onDelete:()=>{ T.topups=T.topups.filter(x=>x.id!==id); saveTrip(); rerender(); }}:null);
+}
+function walletInUse(id){ return T.topups.some(t=>t.walletId===id)||T.expenses.some(e=>e.walletId===id)||T.shared.some(s=>s.payerWalletId===id)||T.settlements.some(s=>s.walletId===id); }
+function openWallet(id){
+  const w=id?walletById(id):null;
+  openForm(w?"Edit wallet":"Add wallet",[
+    {key:"name",label:"Name",placeholder:"e.g. My Forex Card"},
+    {key:"kind",label:"Type",type:"select",options:[["cash","Cash"],["card","Card / Forex"]],default:"cash"}
+  ],w||{kind:"cash"},o=>{
+    if(w){ w.name=o.name; w.kind=o.kind; } else { T.wallets.push({id:uid(),name:o.name||"Wallet",kind:o.kind}); }
+    saveTrip(); rerender();
+  },(w&&id!=="w_cash"&&id!=="w_forex")?{onDelete:()=>{ if(walletInUse(id)){ toast("⚠️ Wallet has transactions — reassign them first"); return; } T.wallets=T.wallets.filter(x=>x.id!==id); saveTrip(); rerender(); }}:null);
+}
+
+/* ---------------- Split sub-tab (companion ledger) ---------------- */
+function splitView(){
+  const comps=tripCompanions();
+  let html=`<div class="fab-actions"><button class="btn block" onclick="openShared()">➕ Shared cost</button><button class="btn ghost block" onclick="openSettlement()">💸 Settle up</button></div>`;
+  if(!comps.length){ html+=`<div class="note" style="margin-bottom:12px">Add the people you're splitting with in <b>More → People</b>, then costs can be divided among them.</div>`; }
+  else{
+    html+=`<div class="card"><h3>Balances</h3>`;
+    comps.forEach(p=>{
+      const owed=netOwedPerson(p.id), settled=Math.abs(owed)<0.005;
+      const label=settled?"":(owed>0?"you owe":"owes you");
+      html+=`<div class="stat"><span>${esc(p.name)}</span><span class="sv" style="color:${settled?'var(--muted)':(owed>0?'var(--warn)':'var(--good)')}">${settled?"✓ settled":label+" "+fmt(Math.abs(owed))}</span></div>`;
+    });
+    html+=`</div>`;
+  }
+  const rows=[].concat(T.shared.map(s=>({k:"shared",date:s.date,o:s}))).concat(T.settlements.map(s=>({k:"settle",date:s.date,o:s})))
+    .sort((a,b)=>(b.date+b.o.id).localeCompare(a.date+a.o.id));
+  if(!rows.length) html+=`<div class="empty"><span class="ei">🤝</span>No shared costs yet.<br>Add the hotel, a dinner, a taxi you split.</div>`;
+  else rows.forEach(r=>{
+    if(r.k==="shared"){
+      const s=r.o, payer=s.payerId==="me"?"You":((personById(s.payerId)||{}).name||"Someone");
+      html+=`<div class="card tap" style="padding:12px" onclick="openShared('${s.id}')"><div class="row between"><div><b>${esc(s.desc||"Shared cost")}</b> <span class="pill ${s.fund==='personal'?'gold':''}">${s.fund==='personal'?'🙂':'🏢'}</span>
+        <div class="small muted">${esc(payer)} paid ${fmt(s.total)} · your share ${fmt(myPart(s))} · ${esc(s.date)}</div></div></div></div>`;
+    } else {
+      const s=r.o, who=(personById(s.personId)||{}).name||"?";
+      const dir=s.dir==="toThem"?("You → "+esc(who)):(esc(who)+" → you");
+      html+=`<div class="card tap" style="padding:12px" onclick="openSettlement('${s.id}')"><div class="row between"><div><b>💸 ${fmt(s.amount)}</b> <span class="pill grey">settle</span><div class="small muted">${dir} · ${esc(walletById(s.walletId).name)} · ${esc(s.date)}</div></div></div></div>`;
+    }
+  });
+  return html;
+}
+function openShared(id){
+  const comps=tripCompanions();
+  if(!comps.length){ toast("Add companions in More → People first"); return; }
+  const s=id?T.shared.find(x=>x.id===id):null;
+  const payerOpts=[["me","I paid"]].concat(comps.map(p=>[p.id,p.name+" paid"]));
+  const defFund=T.template==="business"?"company":"personal";
+  const fields=[
+    {key:"desc",label:"What for",placeholder:"Hotel, dinner, taxi…"},
+    {key:"total",label:"Total amount ("+T.currency+")",type:"number"},
+    {key:"payerId",label:"Paid by",type:"select",options:payerOpts,default:"me"},
+    {key:"payerWalletId",label:"If you paid — from which wallet",type:"select",options:walletOpts(),default:T.wallets[0].id}
+  ];
+  comps.forEach(p=>fields.push({key:"with_"+p.id,label:"Split with "+p.name,type:"checkbox",default:s?(s.parts||[]).some(x=>x.who===p.id):true}));
+  fields.push({key:"myShare",label:"Your share (blank = equal split)",type:"number"});
+  fields.push({key:"fund",label:"Whose money",type:"select",options:FUND_OPTS,default:defFund});
+  fields.push({key:"date",label:"Date",type:"date",default:todayISO()});
+  const init=s?Object.assign({},s,{myShare:myPart(s)}):{payerId:"me",payerWalletId:T.wallets[0].id,fund:defFund,date:todayISO()};
+  openForm(s?"Edit shared cost":"Shared cost",fields,init,o=>{
+    const total=+o.total||0;
+    const others=comps.filter(p=>o["with_"+p.id]).map(p=>p.id);
+    let parts=[];
+    if(o.myShare!==""&&o.myShare!=null&&!isNaN(o.myShare)){
+      const mine=+o.myShare; parts.push({who:"me",amount:mine});
+      const each=others.length?(total-mine)/others.length:0; others.forEach(pid=>parts.push({who:pid,amount:each}));
+    } else {
+      const each=total/(others.length+1); parts.push({who:"me",amount:each}); others.forEach(pid=>parts.push({who:pid,amount:each}));
+    }
+    const rec={desc:o.desc,total,payerId:o.payerId,payerWalletId:o.payerWalletId,fund:o.fund,date:o.date,parts};
+    if(s){ rec.id=s.id; Object.assign(s,rec); } else { rec.id=uid(); T.shared.push(rec); }
+    saveTrip(); rerender();
+  },s?{onDelete:()=>{ T.shared=T.shared.filter(x=>x.id!==id); saveTrip(); rerender(); }}:null);
+}
+function openSettlement(id){
+  const comps=tripCompanions();
+  if(!comps.length){ toast("Add companions in More → People first"); return; }
+  const st=id?T.settlements.find(x=>x.id===id):null;
+  let defPerson=comps[0].id, defOwed=0;
+  comps.forEach(p=>{ const o=netOwedPerson(p.id); if(Math.abs(o)>Math.abs(defOwed)){ defOwed=o; defPerson=p.id; } });
+  const cur=st?st.personId:defPerson;
+  const owed=netOwedPerson(cur);
+  const defDir=owed>=0?"toThem":"fromThem";
+  const defAmt=st?st.amount:(Math.abs(owed)>0.005?+Math.abs(owed).toFixed(2):"");
+  const defFund=T.template==="business"?"company":"personal";
+  openForm(st?"Edit settlement":"Settle up",[
+    {key:"personId",label:"With",type:"select",options:comps.map(p=>[p.id,p.name]),default:cur},
+    {key:"amount",label:"Amount ("+T.currency+")",type:"number",default:defAmt},
+    {key:"dir",label:"Direction",type:"select",options:[["toThem","I pay them"],["fromThem","They pay me"]],default:st?st.dir:defDir},
+    {key:"walletId",label:"Cash / card used",type:"select",options:walletOpts(),default:T.wallets[0].id},
+    {key:"fund",label:"Whose money",type:"select",options:FUND_OPTS,default:defFund},
+    {key:"note",label:"Note"},
+    {key:"date",label:"Date",type:"date",default:todayISO()}
+  ],st||{personId:cur,amount:defAmt,dir:defDir,walletId:T.wallets[0].id,fund:defFund,date:todayISO()},o=>{
+    if(o.amount===""||isNaN(o.amount)) return;
+    if(st){ Object.assign(st,o); } else { o.id=uid(); T.settlements.push(o); }
+    saveTrip(); rerender();
+  },st?{onDelete:()=>{ T.settlements=T.settlements.filter(x=>x.id!==id); saveTrip(); rerender(); }}:null);
+}
+function auditReport(){
+  const comps=tripCompanions();
+  const rec=companyReceived(), direct=companyDirectSpent(), shares=companySharedShares(), spent=direct+shares, onHand=companyOnHand();
+  const m=[];
+  m.push("# Company Money Audit — "+(T.name||"Trip")); m.push("");
+  m.push("Generated "+new Date().toLocaleString("en-GB")+(T.start?"  ·  Trip "+T.start+" to "+(T.end||"?"):"")); m.push("");
+  m.push("## Summary (company money only — personal excluded)"); m.push("");
+  m.push("| | "+T.currency+" |"); m.push("|---|---:|");
+  m.push("| Company money received | "+fmt(rec)+" |");
+  m.push("| Spent — per diem & direct | "+fmt(direct)+" |");
+  m.push("| Spent — my share of shared costs | "+fmt(shares)+" |");
+  m.push("| **Total spent** | **"+fmt(spent)+"** |");
+  m.push("| **On hand to return** | **"+fmt(onHand)+"** |"); m.push("");
+  comps.forEach(p=>{ const o=netOwedPerson(p.id,"company"); if(Math.abs(o)>=0.005) m.push("> ⚠️ Not settled with "+p.name+": "+(o>0?"you owe "+fmt(o):p.name+" owes you "+fmt(-o))+"."); });
+  m.push("> Check: received − spent = "+fmt(rec-spent)+"."); m.push("");
+  m.push("## Money received (company)"); m.push(""); m.push("| Date | Wallet | Note | "+T.currency+" |"); m.push("|---|---|---|---:|");
+  T.topups.filter(t=>fundMatch(t.fund,"company")).sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>m.push("| "+t.date+" | "+walletById(t.walletId).name+" | "+(t.note||"")+" | "+fmt(t.amount)+" |")); m.push("");
+  m.push("## Per diem & direct expenses (company)"); m.push(""); m.push("| Date | Category | Wallet | Note | "+T.currency+" |"); m.push("|---|---|---|---|---:|");
+  T.expenses.filter(e=>fundMatch(e.fund,"company")).sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>m.push("| "+e.date+" | "+e.category+" | "+walletById(e.walletId).name+" | "+(e.note||"")+" | "+fmt(e.amount)+" |")); m.push("");
+  const cs=T.shared.filter(s=>fundMatch(s.fund,"company"));
+  if(cs.length){ m.push("## Shared costs — my share (company)"); m.push(""); m.push("| Date | What | Paid by | Total | My share |"); m.push("|---|---|---|---:|---:|");
+    cs.sort((a,b)=>a.date.localeCompare(b.date)).forEach(s=>m.push("| "+s.date+" | "+(s.desc||"")+" | "+(s.payerId==="me"?"Me":((personById(s.payerId)||{}).name||"?"))+" | "+fmt(s.total)+" | "+fmt(myPart(s))+" |")); m.push(""); }
+  const sett=T.settlements.filter(s=>fundMatch(s.fund,"company"));
+  if(sett.length){ m.push("## Settlements (company)"); m.push(""); m.push("| Date | With | Direction | Wallet | "+T.currency+" |"); m.push("|---|---|---|---|---:|");
+    sett.sort((a,b)=>a.date.localeCompare(b.date)).forEach(s=>m.push("| "+s.date+" | "+((personById(s.personId)||{}).name||"?")+" | "+(s.dir==="toThem"?"I paid":"They paid me")+" | "+walletById(s.walletId).name+" | "+fmt(s.amount)+" |")); m.push(""); }
+  m.push("---"); m.push("*Personal money is deliberately excluded from this report. Wallet real balances (company + personal) live in the app.*");
+  download("company-audit-"+(T.name||"trip").replace(/\W+/g,"-").toLowerCase()+".md",m.join("\n"),"text/markdown");
+  toast("Audit report downloaded");
 }
 
 /* ============================================================
@@ -1276,7 +1516,7 @@ function addPastLog(){ editField("Entry date","",v=>{ if(v) openLogEntry(v); },"
 /* ============================================================
    MORE (settings, modules, export, danger)
    ============================================================ */
-const MODULE_INFO=[["planner","🗓️ Day planner","Day-by-day itinerary"],["timeline","🎫 Bookings & airports","Flights, hotels, layover cards"],["budget","💰 Budget & expenses","Spending, per diem, CSV"],["lists","✅ Lists","Packing, to-buy, to-do"],["journal","📓 Journal","Daily notes & moods"]];
+const MODULE_INFO=[["planner","🗓️ Day planner","Day-by-day itinerary"],["timeline","🎫 Bookings & airports","Flights, hotels, layover cards"],["budget","💰 Budget & expenses","Spending, per diem, CSV"],["business","💼 Wallets & splitting","Cash/card wallets, company vs personal, split costs with companions"],["lists","✅ Lists","Packing, to-buy, to-do"],["journal","📓 Journal","Daily notes & moods"]];
 let moreSub=null;
 function moreOpen(v){ moreSub=v; rerender(); window.scrollTo(0,0); }
 function moreBack(){ moreSub=null; rerender(); }
@@ -1321,7 +1561,7 @@ function moreView(){
   <div class="card"><h3 style="color:var(--warn)">Danger zone</h3>
     <button class="btn warn block" onclick="deleteTrip()">🗑️ Delete this trip</button>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:14px">Yātrā · Phase 1 · all data on this device · works offline</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:14px">Yātrā · all data on this device · works offline</p>`;
   return html;
 }
 function editTripField(key,label,type){
@@ -1516,7 +1756,12 @@ function editPersonal(id){ const f=SHARED.personal.fields.find(x=>x.id===id); op
 function addPersonal(){ openForm("New field",[{key:"label",label:"Label"},{key:"value",label:"Value",type:"textarea"}],{},o=>{ o.id=uid(); SHARED.personal.fields.push(o); saveShared(); rerender(); }); }
 function toggleModule(m){
   T.modules[m]=!T.modules[m];
-  if(tripTab===m&&!T.modules[m]) tripTab="today";
+  if(m==="business"&&T.modules.business){
+    seedWallets(T);
+    // tag any pre-existing expenses so wallet balances are consistent
+    const cash=(T.wallets.find(w=>w.kind==="cash")||T.wallets[0]).id;
+    T.expenses.forEach(e=>{ if(!e.walletId) e.walletId=cash; if(!e.fund) e.fund=(T.template==="business"?"company":"personal"); });
+  }
   saveTrip(); render();
 }
 function download(name,text,mime){

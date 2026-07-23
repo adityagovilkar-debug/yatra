@@ -41,7 +41,17 @@ Trips move through a lifecycle automatically by their dates: **Planning → Upco
 - **Emergency card** per trip: trip fields + operator + companion phones + shared my-info
 - Backups now carry the shared wallet and all images
 
-Planned next: business pack (wallets/company-vs-personal funds/teammate splits — ported from the Germany Trip app), memory room (past-trip reading view, Year in Travel), Germany-trip import.
+## Phase 3 — wallets & splitting (business pack)
+
+Opt-in **Wallets & splitting** module (on by default for the Business template, toggleable on any trip). Adds to the Money tab:
+
+- **Wallets** — per-trip cash/card wallets, each showing real balance split into **company vs personal** money; top-ups tagged by source; a **company-money audit** card (received / spent / on-hand-to-return) that appears only when there's company activity, with a downloadable Markdown audit report that excludes personal money
+- **Split** — divide costs (hotel, dinners, taxis) among the trip's **companions from the people directory**; equal split by default with a "your share" override and per-person participation checkboxes; a running **you-owe / owes-you** balance per person and settlements to square up
+- Expenses gain wallet + fund tags when the module is on; per-diem then tracks company spending; expenses CSV gains wallet/fund columns
+
+The money model tracks only *your* position (what you owe / are owed), so group trips and business-audit trips both work. Backups carry all of it.
+
+Planned next: memory room (past-trip reading view, Year in Travel), Germany-trip import.
 
 ## Storage
 
